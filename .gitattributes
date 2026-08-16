@@ -1,0 +1,12 @@
+# Keep LF in the repo for files executed on Linux CI runners.
+*.sh   text eol=lf
+*.yml  text eol=lf
+*.yaml text eol=lf
+
+# Normalize line endings for source; let Git decide working-copy EOL.
+*.ts   text
+*.js   text
+*.json text
+*.css  text
+*.html text
+*.md   text

@@ -1,0 +1,87 @@
+name: Deploy site to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+  # Also triggered by the data workflow after a successful tile build
+  workflow_run:
+    workflows: ["Build data tiles"]
+    types: [completed]
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
+jobs:
+  build:
+    if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install
+        run: npm ci
+
+      - name: Test
+        run: npm test
+
+      - name: Resolve latest data release tag
+        id: data
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG=$(gh release list --limit 1 --json tagName -q '.[0].tagName' 2>/dev/null || echo "")
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "Resolved data tag: '$TAG'"
+
+      - name: Build site
+        env:
+          VITE_BASE: "/my_map_run/"
+          VITE_PMTILES_URL: "/my_map_run/europe-run.pmtiles"
+          VITE_EXTENT_URL: "/my_map_run/europe-extent.geojson"
+          VITE_DATA_DATE: ${{ steps.data.outputs.tag }}
+        run: |
+          export VITE_BUILD_DATE="$(date -u +%Y-%m-%d)"
+          npm run build
+
+      - name: Download latest data assets
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "Fetching latest release assets…"
+          gh release download \
+            --pattern "europe-run.pmtiles" \
+            --pattern "europe-extent.geojson" \
+            --dir packages/web/dist \
+            2>&1 || echo "WARNING: No release found yet — deploying without data assets"
+          ls -lh packages/web/dist/europe-run.pmtiles 2>/dev/null || true
+          ls -lh packages/web/dist/europe-extent.geojson 2>/dev/null || true
+
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: packages/web/dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy
+        id: deployment
+        uses: actions/deploy-pages@v4

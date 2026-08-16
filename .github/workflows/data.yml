@@ -1,0 +1,174 @@
+name: Build data tiles
+
+# Runs the full OSM → PMTiles pipeline on a GitHub-hosted runner.
+# Manual trigger ("Run workflow" button on the Actions tab) + monthly cron.
+# Publishes europe-run.pmtiles to a GitHub Release (tag: data-YYYY-MM-DD).
+
+on:
+  workflow_dispatch:
+  schedule:
+    # 04:23 UTC on the 1st of each month. Offset from the hour to be polite.
+    - cron: "23 4 1 * *"
+
+permissions:
+  contents: write  # needed to create/upload releases
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Default GH runners have ~14 GB free disk. europe-latest.osm.pbf is ~30 GB.
+      - name: Free up disk space
+        uses: jlumbroso/free-disk-space@main
+        with:
+          tool-cache: true
+          android: true
+          dotnet: true
+          haskell: true
+          large-packages: true
+          swap-storage: false
+
+      - name: Install system tools (osmium, tippecanoe)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y osmium-tool tippecanoe
+
+      - name: Install go-pmtiles CLI
+        run: |
+          VERSION="1.22.2"
+          curl -fsSL -o pmtiles.tar.gz \
+            "https://github.com/protomaps/go-pmtiles/releases/download/v${VERSION}/go-pmtiles_${VERSION}_Linux_x86_64.tar.gz"
+          tar xzf pmtiles.tar.gz pmtiles
+          sudo mv pmtiles /usr/local/bin/pmtiles
+          pmtiles version
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install npm deps
+        run: npm ci
+
+      - name: Run interpreter tests (fail fast)
+        run: npm test
+
+      - name: Show free disk before build
+        run: df -h /
+
+      - name: Fetch OSM extract
+        run: npm run data:fetch
+
+      - name: Filter to relevant tags
+        run: npm run data:filter
+
+      - name: Free the raw PBF (not needed from here on)
+        run: |
+          rm -f data/europe-latest.osm.pbf data/europe-latest.osm.pbf.md5 data/europe-latest.osm.pbf.md5.raw
+          df -h /
+
+      - name: Check filtered PBF
+        run: |
+          ls -lh data/europe-filtered.osm.pbf
+          echo "--- osmium fileinfo ---"
+          osmium fileinfo -e data/europe-filtered.osm.pbf || true
+
+      - name: Export filtered PBF to GeoJSONSeq
+        run: |
+          osmium export data/europe-filtered.osm.pbf -f geojsonseq \
+            --add-unique-id=type_id \
+            -o data/europe-raw.geojsonseq --overwrite
+          echo "Raw GeoJSONSeq size:"
+          ls -lh data/europe-raw.geojsonseq
+          echo "First 3 lines:"
+          head -3 data/europe-raw.geojsonseq || true
+          echo "Line count:"
+          wc -l < data/europe-raw.geojsonseq
+
+      - name: Normalize tags
+        run: |
+          npx tsx packages/tile-builder/src/normalize.ts \
+            < data/europe-raw.geojsonseq \
+            > data/europe-enriched.geojsonseq
+          echo "Enriched GeoJSONSeq size:"
+          ls -lh data/europe-enriched.geojsonseq
+          echo "First 3 lines:"
+          head -3 data/europe-enriched.geojsonseq || true
+          echo "Line count:"
+          wc -l < data/europe-enriched.geojsonseq
+
+      - name: Clean up raw export (save disk)
+        run: rm -f data/europe-raw.geojsonseq data/europe-filtered.osm.pbf
+
+      - name: Build tiles (tippecanoe + pmtiles)
+        run: |
+          tippecanoe --force --layer=run \
+            --minimum-zoom=6 --maximum-zoom=14 \
+            --drop-densest-as-needed --coalesce-densest-as-needed \
+            --read-parallel --no-tile-size-limit \
+            --attribute-type=osm_id:int \
+            -o data/europe-run.mbtiles data/europe-enriched.geojsonseq
+          pmtiles convert --force data/europe-run.mbtiles data/europe-run.pmtiles
+          rm -f data/europe-run.mbtiles data/europe-enriched.geojsonseq
+
+      # Convert Geofabrik's europe.poly (the exact source-extract extent)
+      # into a GeoJSON MultiPolygon. The web app draws it as a dashed outline
+      # so users can see where data coverage ends.
+      - name: Generate Europe extent GeoJSON
+        run: |
+          curl -fsSL -o data/europe.poly https://download.geofabrik.de/europe.poly
+          node -e '
+            const fs = require("fs");
+            const lines = fs.readFileSync("data/europe.poly", "utf8").split(/\r?\n/);
+            const polys = [];
+            let inSection = false, isHole = false, pts = [], headerSeen = false;
+            for (const raw of lines) {
+              const line = raw.trim();
+              if (!line) continue;
+              if (!headerSeen && !inSection) { headerSeen = true; continue; }
+              if (line === "END") {
+                if (inSection) {
+                  if (pts.length) {
+                    const ring = (pts[0][0] === pts[pts.length-1][0] && pts[0][1] === pts[pts.length-1][1]) ? pts : [...pts, pts[0]];
+                    if (isHole) { if (polys.length) polys[polys.length-1].holes.push(ring); }
+                    else { polys.push({ outer: ring, holes: [] }); }
+                  }
+                  inSection = false; pts = [];
+                }
+                continue;
+              }
+              if (!inSection) { inSection = true; isHole = line.startsWith("!"); pts = []; continue; }
+              const m = line.split(/\s+/).map(Number);
+              if (m.length >= 2 && Number.isFinite(m[0]) && Number.isFinite(m[1])) pts.push([m[0], m[1]]);
+            }
+            const coordinates = polys.map(p => [p.outer, ...p.holes]);
+            const geo = { type: "Feature", properties: { name: "Europe (Geofabrik extract extent)" }, geometry: { type: "MultiPolygon", coordinates } };
+            fs.writeFileSync("data/europe-extent.geojson", JSON.stringify(geo));
+            console.log("polygons:", polys.length, "outer points:", polys[0]?.outer.length);
+          '
+          ls -lh data/europe-extent.geojson
+
+      - name: Report artifact size
+        run: ls -lh data/europe-run.pmtiles data/europe-extent.geojson
+
+      - name: Publish to GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="data-$(date +%Y-%m-%d)"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" data/europe-run.pmtiles data/europe-extent.geojson --clobber
+          else
+            gh release create "$TAG" \
+              --title "Data snapshot $TAG" \
+              --notes "PMTiles running overlay built from europe-latest.osm.pbf on $(date -u +%Y-%m-%dT%H:%M:%SZ)." \
+              data/europe-run.pmtiles data/europe-extent.geojson
+          fi

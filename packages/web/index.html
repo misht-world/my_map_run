@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Running Map — Europe</title>
+    <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.0/dist/maplibre-gl.css" />
+    <link rel="stylesheet" href="/src/styles.css" />
+  </head>
+  <body>
+    <div id="map"></div>
+
+    <!-- Map context menu (right-click / long-press) -->
+    <div id="map-ctx-menu" class="map-ctx-menu" hidden>
+      <button data-action="copy">Copy coordinates</button>
+    </div>
+
+    <aside id="panel">
+      <header>
+        <div>
+          <h1>Where can I run?</h1>
+          <span class="sub">OpenStreetMap · Europe</span>
+        </div>
+        <button id="panel-toggle" aria-label="Toggle panel">☰</button>
+      </header>
+
+      <div id="panel-body">
+
+        <!-- Layers -->
+        <details class="block" open>
+          <summary>Layers</summary>
+          <div class="block-body">
+            <label><input type="checkbox" id="toggle-designated" checked /> Runnable — pedestrian ways</label>
+            <label><input type="checkbox" id="toggle-allowed"    checked /> Runnable — quiet roads (dim)</label>
+            <label><input type="checkbox" id="toggle-barriers"   checked /> Blocked barriers ✕</label>
+            <label><input type="checkbox" id="toggle-passable"          /> Passable barriers</label>
+            <hr>
+            <label><input type="checkbox" id="toggle-water"      checked /> 💧 Drinking water</label>
+            <label><input type="checkbox" id="toggle-shelter"    checked /> ⛺ Shelter / gazebo</label>
+            <label><input type="checkbox" id="toggle-viewpoint"  checked /> 👁 Viewpoints</label>
+            <label><input type="checkbox" id="toggle-toilets"    checked /> 🚻 Toilets</label>
+          </div>
+        </details>
+
+        <!-- Legend -->
+        <details class="block">
+          <summary>Legend</summary>
+          <div class="block-body">
+            <ul class="legend">
+              <li><span class="sw sw-designated"></span> Runnable pedestrian way</li>
+              <li><span class="sw sw-allowed"></span> Runnable quiet road (foot OK, no sidewalk mapped)</li>
+              <li><span class="sw sw-steps"></span> Steps / stairs</li>
+              <li><span class="sw sw-blocked"></span> Barrier — no pedestrian access</li>
+              <li><span class="sw sw-water"></span> Drinking water</li>
+              <li><span class="sw sw-shelter"></span> Shelter / gazebo</li>
+              <li><span class="sw sw-viewpoint"></span> Viewpoint</li>
+              <li><span class="sw sw-toilets"></span> Toilets</li>
+            </ul>
+            <p class="hint">Click a line or marker for details — status and source links.</p>
+          </div>
+        </details>
+
+        <!-- Map style -->
+        <details class="block">
+          <summary>Map style</summary>
+          <div class="block-body">
+            <select id="style-select">
+              <option value="https://tiles.openfreemap.org/styles/positron" selected>Light (Positron)</option>
+              <option value="https://tiles.openfreemap.org/styles/liberty">Detailed (Liberty)</option>
+              <option value="https://tiles.openfreemap.org/styles/bright">Bright</option>
+            </select>
+          </div>
+        </details>
+
+        <!-- Search by coordinates -->
+        <details class="block">
+          <summary>Search by coordinates</summary>
+          <div class="block-body">
+            <form id="coord-form">
+              <input id="coord-input" type="text" placeholder="47.4979, 19.0402" />
+              <button type="submit">Go</button>
+            </form>
+            <p id="coord-error" class="error" hidden></p>
+          </div>
+        </details>
+
+        <!-- Share + cursor -->
+        <section class="block">
+          <button id="share-link" type="button">Copy shareable link</button>
+          <p id="cursor-coords" class="cursor"></p>
+        </section>
+
+        <footer>
+          <details class="disclaimer">
+            <summary>About &amp; disclaimer</summary>
+            <p>
+              <strong>Not for navigation.</strong> An informational overlay of
+              where you can run, built from volunteer-contributed OpenStreetMap
+              data. Sidewalks, gates and access rules are incompletely mapped —
+              a missing line does not always mean "no running", and a present
+              line does not guarantee safe or legal passage. Verify on the ground.
+            </p>
+            <p>
+              <strong>Data updates:</strong> the OSM snapshot is rebuilt monthly.
+              The date below is the snapshot this page is using.
+            </p>
+            <p>
+              <strong>Coverage:</strong> the dashed outline shows the exact area
+              of the source extract (Geofabrik &ldquo;europe&rdquo;). Outside it
+              the map has no data.
+            </p>
+            <p class="version">
+              Data: <span id="v-data">—</span> · Site built: <span id="v-build">—</span>
+            </p>
+          </details>
+          <p class="credits">
+            Data © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap contributors</a> (ODbL).
+            Basemap <a href="https://openfreemap.org/" target="_blank" rel="noopener">OpenFreeMap</a>.<br>
+            <a href="https://github.com/misht-world/my_map_run" target="_blank" rel="noopener">source</a> ·
+            <a href="https://github.com/misht-world/my_map_run/issues/new" target="_blank" rel="noopener">feedback</a>
+          </p>
+        </footer>
+      </div><!-- /panel-body -->
+    </aside>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

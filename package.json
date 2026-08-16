@@ -1,0 +1,27 @@
+{
+  "name": "my-map-run",
+  "private": true,
+  "version": "0.1.0",
+  "description": "MVP: OpenStreetMap-based web map showing where you can run across Europe — bright runnable-path overlay, blocked-barrier markers, and runner POI (water, shelter, viewpoints, toilets).",
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "npm run dev -w @mmr/web",
+    "build": "npm run build -w @mmr/web",
+    "test": "npm run test -w @mmr/interpreter",
+    "data:fetch": "bash scripts/01-fetch.sh",
+    "data:filter": "bash scripts/02-filter.sh",
+    "data:normalize": "npm run normalize -w @mmr/tile-builder",
+    "data:tile": "bash scripts/04-tile.sh",
+    "data:publish": "bash scripts/05-publish.sh",
+    "data:build": "npm run data:fetch && npm run data:filter && npm run data:normalize && npm run data:tile"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.0",
+    "vitest": "^2.1.0"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

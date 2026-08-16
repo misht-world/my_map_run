@@ -1,0 +1,17 @@
+{
+  "name": "@mmr/tile-builder",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "normalize": "tsx src/normalize.ts"
+  },
+  "dependencies": {
+    "@mmr/model": "*",
+    "@mmr/interpreter": "*"
+  },
+  "devDependencies": {
+    "tsx": "^4.19.0",
+    "@types/node": "^20.12.0"
+  }
+}

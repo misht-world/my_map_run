@@ -1,0 +1,23 @@
+node_modules/
+dist/
+*.log
+
+# Data artifacts (large, regenerated from OSM)
+data/
+*.osm.pbf
+*.geojsonseq
+*.mbtiles
+*.pmtiles
+
+# Editor
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Env
+.env
+.env.local
+
+# Claude Code local settings
+.claude/

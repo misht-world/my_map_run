@@ -70,6 +70,21 @@ describe("interpretFoot — excluded (no line)", () => {
   it("construction → null", () => {
     expect(interpretFoot({ highway: "construction" }).tier).toBeNull();
   });
+  it("indoor=yes → null", () => {
+    expect(interpretFoot({ highway: "footway", indoor: "yes" }).tier).toBeNull();
+  });
+  it("highway=corridor + indoor=yes → designated (corridors kept)", () => {
+    expect(interpretFoot({ highway: "corridor", indoor: "yes" }).tier).toBe("designated");
+  });
+  it("indoor=corridor without highway → designated", () => {
+    expect(interpretFoot({ indoor: "corridor" }).tier).toBe("designated");
+  });
+  it("conveying=reversible (moving walkway) → null", () => {
+    expect(interpretFoot({ highway: "footway", conveying: "reversible" }).tier).toBeNull();
+  });
+  it("conveying=yes → null", () => {
+    expect(interpretFoot({ highway: "steps", conveying: "yes" }).tier).toBeNull();
+  });
   it("no highway tag → null", () => {
     expect(interpretFoot({ amenity: "cafe" }).tier).toBeNull();
   });

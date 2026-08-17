@@ -53,12 +53,25 @@ export function interpretFoot(tags: OsmTags): FootResult {
   const highway = tags["highway"];
   const foot = tags["foot"];
   const access = tags["access"];
+  const indoor = tags["indoor"];
 
-  if (!highway) {
+  // Corridors (indoor connecting passages) are useful running links and are
+  // kept even when tagged indoor — via highway=corridor or indoor=corridor.
+  const isCorridor = highway === "corridor" || indoor === "corridor";
+
+  if (!highway && !isCorridor) {
     return { tier: null, is_steps: false, reason: FootReason.NOT_HIGHWAY };
   }
-  if (NON_ROAD.has(highway)) {
+  if (highway && NON_ROAD.has(highway)) {
     return { tier: null, is_steps: false, reason: FootReason.NOT_BUILT };
+  }
+  // Indoor ways are excluded — except corridors (see above).
+  if (indoor === "yes" && !isCorridor) {
+    return { tier: null, is_steps: false, reason: FootReason.INDOOR };
+  }
+  // Moving walkways / escalators.
+  if (tags["conveying"] !== undefined && tags["conveying"] !== "no") {
+    return { tier: null, is_steps: false, reason: FootReason.CONVEYING };
   }
 
   // A hard foot ban overrides everything else.
@@ -70,7 +83,7 @@ export function interpretFoot(tags: OsmTags): FootResult {
   const footOk = footAllows(foot);
 
   // Motorways/trunks: no pedestrians unless foot is explicitly allowed (rare).
-  if (MOTOR_ONLY.has(highway)) {
+  if (highway && MOTOR_ONLY.has(highway)) {
     if (footOk) {
       return { tier: "allowed", is_steps, reason: FootReason.FOOT_DESIGNATED };
     }
@@ -88,13 +101,16 @@ export function interpretFoot(tags: OsmTags): FootResult {
   if (footOk) {
     return { tier: "designated", is_steps, reason: FootReason.FOOT_DESIGNATED };
   }
-  if (DESIGNATED_HW.has(highway)) {
+  if (isCorridor) {
+    return { tier: "designated", is_steps, reason: FootReason.DESIGNATED_HIGHWAY };
+  }
+  if (highway && DESIGNATED_HW.has(highway)) {
     return { tier: "designated", is_steps, reason: FootReason.DESIGNATED_HIGHWAY };
   }
   if (sidewalk) {
     return { tier: "designated", is_steps, reason: FootReason.HAS_SIDEWALK };
   }
-  if (ALLOWED_HW.has(highway)) {
+  if (highway && ALLOWED_HW.has(highway)) {
     return { tier: "allowed", is_steps, reason: FootReason.ALLOWED_DEFAULT };
   }
 

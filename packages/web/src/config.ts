@@ -16,6 +16,12 @@ export const config = {
     env.VITE_PMTILES_URL ??
     "https://github.com/misht-world/my_map_run/releases/latest/download/europe-run.pmtiles",
 
+  /** Dev/preview only: if set, load a normalized GeoJSON FeatureCollection
+   *  (same schema as the tiles) as the overlay instead of PMTiles. Used to
+   *  preview a single city without the full osmium/tippecanoe pipeline —
+   *  see scripts/local-geojson.ts. Empty in production. */
+  geojsonUrl: env.VITE_GEOJSON_URL ?? "",
+
   /** URL of the data-coverage outline (Geofabrik europe.poly → GeoJSON). */
   extentUrl:
     env.VITE_EXTENT_URL ??

@@ -30,15 +30,16 @@
         <details class="block" open>
           <summary>Layers</summary>
           <div class="block-body">
-            <label><input type="checkbox" id="toggle-designated" checked /> Runnable — pedestrian ways</label>
-            <label><input type="checkbox" id="toggle-allowed"    checked /> Runnable — quiet roads (dim)</label>
-            <label><input type="checkbox" id="toggle-barriers"   checked /> Blocked barriers ✕</label>
-            <label><input type="checkbox" id="toggle-passable"          /> Passable barriers</label>
+            <label><input type="checkbox" id="toggle-tracks"     checked /><span class="sw sw-track"></span> Running tracks</label>
+            <label><input type="checkbox" id="toggle-designated" checked /><span class="sw sw-designated"></span> Runnable — pedestrian ways</label>
+            <label><input type="checkbox" id="toggle-allowed"    checked /><span class="sw sw-allowed"></span> Runnable — quiet roads (dim)</label>
+            <label><input type="checkbox" id="toggle-barriers"   checked /><span class="sw sw-blocked"></span> Blocked barriers</label>
+            <label><input type="checkbox" id="toggle-passable"          /><span class="sw sw-passable"></span> Passable barriers</label>
             <hr>
-            <label><input type="checkbox" id="toggle-water"      checked /> 💧 Drinking water</label>
-            <label><input type="checkbox" id="toggle-shelter"    checked /> ⛺ Shelter / gazebo</label>
-            <label><input type="checkbox" id="toggle-viewpoint"  checked /> 👁 Viewpoints</label>
-            <label><input type="checkbox" id="toggle-toilets"    checked /> 🚻 Toilets</label>
+            <label><input type="checkbox" id="toggle-water"      checked /><span class="sw sw-poi" data-poi="water"></span> Drinking water</label>
+            <label><input type="checkbox" id="toggle-shelter"    checked /><span class="sw sw-poi" data-poi="shelter"></span> Shelter / gazebo</label>
+            <label><input type="checkbox" id="toggle-viewpoint"  checked /><span class="sw sw-poi" data-poi="viewpoint"></span> Viewpoints</label>
+            <label><input type="checkbox" id="toggle-toilets"    checked /><span class="sw sw-poi" data-poi="toilets"></span> Toilets</label>
           </div>
         </details>
 
@@ -47,14 +48,16 @@
           <summary>Legend</summary>
           <div class="block-body">
             <ul class="legend">
+              <li><span class="sw sw-track"></span> Running track (leisure=track)</li>
               <li><span class="sw sw-designated"></span> Runnable pedestrian way</li>
               <li><span class="sw sw-allowed"></span> Runnable quiet road (foot OK, no sidewalk mapped)</li>
+              <li><span class="sw sw-area"></span> Pedestrian area (crossable)</li>
               <li><span class="sw sw-steps"></span> Steps / stairs</li>
               <li><span class="sw sw-blocked"></span> Barrier — no pedestrian access</li>
-              <li><span class="sw sw-water"></span> Drinking water</li>
-              <li><span class="sw sw-shelter"></span> Shelter / gazebo</li>
-              <li><span class="sw sw-viewpoint"></span> Viewpoint</li>
-              <li><span class="sw sw-toilets"></span> Toilets</li>
+              <li><span class="sw sw-poi" data-poi="water"></span> Drinking water</li>
+              <li><span class="sw sw-poi" data-poi="shelter"></span> Shelter / gazebo</li>
+              <li><span class="sw sw-poi" data-poi="viewpoint"></span> Viewpoint</li>
+              <li><span class="sw sw-poi" data-poi="toilets"></span> Toilets</li>
             </ul>
             <p class="hint">Click a line or marker for details — status and source links.</p>
           </div>
@@ -68,6 +71,7 @@
               <option value="https://tiles.openfreemap.org/styles/positron" selected>Light (Positron)</option>
               <option value="https://tiles.openfreemap.org/styles/liberty">Detailed (Liberty)</option>
               <option value="https://tiles.openfreemap.org/styles/bright">Bright</option>
+              <option value="satellite">Satellite (Esri)</option>
             </select>
           </div>
         </details>

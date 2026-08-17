@@ -21,6 +21,11 @@ const footAllows = (foot: string | undefined): boolean =>
  *   passable → a tracked barrier that a pedestrian can pass.
  */
 export function interpretBarrier(tags: OsmTags): BarrierResult | null {
+  // Building doors and entrances are never running obstacles — skip entirely
+  // (no marker, no ✕), even if tagged foot=no / access=private. A running
+  // route won't pass through a house door or a home entrance gate.
+  if (tags["door"] !== undefined || tags["entrance"] !== undefined) return null;
+
   const barrier = tags["barrier"];
   const foot = tags["foot"];
   const access = tags["access"];

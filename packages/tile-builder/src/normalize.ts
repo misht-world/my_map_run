@@ -21,8 +21,9 @@
 
 import { createInterface } from "node:readline";
 import { stdin, stdout, stderr } from "node:process";
-import { interpretFoot, interpretBarrier, interpretPoi } from "@mmr/interpreter";
+import { interpretFoot, interpretBarrier, interpretPoi, interpretTrack } from "@mmr/interpreter";
 import type { TileProperties } from "@mmr/model";
+
 
 interface InputFeature {
   type: "Feature";
@@ -39,6 +40,8 @@ const counters = {
   emitted: 0,
   parseErrors: 0,
   line: { designated: 0, allowed: 0 },
+  track: 0,
+  area: 0,
   barrier: { blocked: 0, passable: 0 },
   poi: { water: 0, shelter: 0, viewpoint: 0, toilets: 0 },
 };
@@ -93,18 +96,29 @@ for await (const line of rl) {
   }
 
   const geomType = feat.geometry?.type ?? "";
-  const isLine = geomType === "LineString" || geomType === "MultiLineString";
+  const isLineLike = geomType === "LineString" || geomType === "MultiLineString"
+    || geomType === "Polygon" || geomType === "MultiPolygon";
   const isPoint = geomType === "Point";
+  const isAreaFeature = geomType === "Polygon" || geomType === "MultiPolygon" || tags["area"] === "yes";
 
   let props: TileProperties | null = null;
+  let outGeometry: unknown = feat.geometry;
 
-  if (isLine) {
-    // Runnable way?
+  if (isLineLike) {
+    // A dedicated running track (leisure=track) is the "core" of the map and
+    // may not carry a highway tag — check it independently of interpretFoot.
+    const track = interpretTrack(tags);
     const foot = interpretFoot(tags);
-    if (foot.tier) {
-      props = { osm_type: osmType, osm_id: osmId, kind: "line", foot_tier: foot.tier };
+    if (track || foot.tier) {
+      const tier = foot.tier ?? "designated";
+      props = { osm_type: osmType, osm_id: osmId, kind: "line", foot_tier: tier };
       if (foot.is_steps) props.is_steps = true;
-      counters.line[foot.tier]++;
+      if (track) { props.is_track = true; counters.track++; }
+      // Areas keep their Polygon geometry so the web style can fill them
+      // (translucent). Track areas fall through to the track line layer.
+      if (isAreaFeature) { props.is_area = true; counters.area++; }
+      if (foot.tier) counters.line[foot.tier]++;
+      // outGeometry stays feat.geometry (LineString or Polygon as osmium gave it)
     }
   } else if (isPoint) {
     // Barrier takes precedence over POI (a blocked gate matters more than a
@@ -130,7 +144,7 @@ for await (const line of rl) {
   if (!props) continue;
 
   counters.emitted++;
-  stdout.write(JSON.stringify({ type: "Feature", geometry: feat.geometry, properties: props }) + "\n");
+  stdout.write(JSON.stringify({ type: "Feature", geometry: outGeometry, properties: props }) + "\n");
 }
 
 stderr.write(`[normalize] done. ${JSON.stringify(counters)}\n`);

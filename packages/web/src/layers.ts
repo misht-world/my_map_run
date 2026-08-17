@@ -1,10 +1,11 @@
-import type { LayerSpecification } from "maplibre-gl";
+import type { LayerSpecification, ExpressionSpecification } from "maplibre-gl";
 
 const SOURCE = "run";
 const SOURCE_LAYER = "run";
 
 // Layer-ID groups exposed for toggle logic in main.ts.
-export const DESIGNATED_LAYER_IDS = ["run-designated-casing", "run-designated", "run-steps"] as const;
+export const TRACK_LAYER_IDS      = ["run-track-casing", "run-track"] as const;
+export const DESIGNATED_LAYER_IDS = ["run-designated-casing", "run-designated", "run-area-fill", "run-area", "run-steps"] as const;
 export const ALLOWED_LAYER_IDS    = ["run-allowed"] as const;
 export const BARRIER_BLOCKED_IDS  = ["barrier-blocked"] as const;
 export const BARRIER_PASSABLE_IDS = ["barrier-passable"] as const;
@@ -13,59 +14,103 @@ export const SHELTER_LAYER_IDS    = ["poi-shelter"] as const;
 export const VIEWPOINT_LAYER_IDS  = ["poi-viewpoint"] as const;
 export const TOILETS_LAYER_IDS    = ["poi-toilets"] as const;
 
-// Palette — bright, high-contrast on the muted Positron basemap, and
-// distinct from the red barrier cross.
+// All four POI markers share ONE colour and style; only the pictogram differs.
+export const POI_COLOR = "#37474f"; // blue-grey chip
+
 export const COLORS = {
   runnable: "#00c2a8", // turquoise — "you can run here"
-  steps:    "#00695c", // darker teal dash overlay
+  track:    "#ff6d00", // deep orange — dedicated running tracks (the core)
+  steps:    "#000000", // black dashes for stairs
+  area:     "#00c2a8", // translucent fill for area=yes (same hue as runnable)
   blocked:  "#d50000", // red ✕
   passable: "#9e9e9e",
-  water:    "#1e88e5",
-  shelter:  "#6d4c41",
-  viewpoint:"#8e24aa",
-  toilets:  "#00897b",
 } as const;
 
 const line = { type: "line" as const, source: SOURCE, "source-layer": SOURCE_LAYER, minzoom: 6 };
 const point = { source: SOURCE, "source-layer": SOURCE_LAYER } as const;
+
+const notArea: ExpressionSpecification = ["!", ["to-boolean", ["get", "is_area"]]];
+const notTrack: ExpressionSpecification = ["!", ["to-boolean", ["get", "is_track"]]];
 
 export const overlayLayers: LayerSpecification[] = [
 
   // ── Allowed tier (quiet roads, no confirmed sidewalk) — dim, drawn first ──
   {
     ...line, id: "run-allowed",
-    filter: ["==", ["get", "foot_tier"], "allowed"],
+    filter: ["all", ["==", ["get", "foot_tier"], "allowed"], notArea, notTrack],
     layout: { "line-cap": "round", "line-join": "round" },
     paint: {
       "line-color": COLORS.runnable,
-      "line-width": ["interpolate", ["linear"], ["zoom"], 6, 1, 12, 2.5, 16, 4],
+      "line-width": ["interpolate", ["linear"], ["zoom"], 6, 0.6, 12, 1.2, 16, 2],
       "line-opacity": 0.4,
     },
   },
 
-  // ── Designated tier — bright line with a white casing for contrast ────────
+  // ── Designated tier — thin bright line with a subtle white casing ─────────
   {
     ...line, id: "run-designated-casing",
-    filter: ["==", ["get", "foot_tier"], "designated"],
+    filter: ["all", ["==", ["get", "foot_tier"], "designated"], notArea, notTrack],
     layout: { "line-cap": "round", "line-join": "round" },
     paint: {
       "line-color": "#ffffff",
-      "line-width": ["interpolate", ["linear"], ["zoom"], 6, 3, 12, 5.5, 16, 9],
-      "line-opacity": 0.7,
+      "line-width": ["interpolate", ["linear"], ["zoom"], 6, 1.6, 12, 2.6, 16, 4],
+      "line-opacity": 0.6,
     },
   },
   {
     ...line, id: "run-designated",
-    filter: ["==", ["get", "foot_tier"], "designated"],
+    filter: ["all", ["==", ["get", "foot_tier"], "designated"], notArea, notTrack],
     layout: { "line-cap": "round", "line-join": "round" },
     paint: {
       "line-color": COLORS.runnable,
-      "line-width": ["interpolate", ["linear"], ["zoom"], 6, 1.6, 12, 3.2, 16, 6],
+      "line-width": ["interpolate", ["linear"], ["zoom"], 6, 0.9, 12, 1.8, 16, 3],
       "line-opacity": 0.95,
     },
   },
 
-  // ── Steps overlay — dashed, on top of the runnable line ───────────────────
+  // ── Areas (pedestrian squares etc.) — translucent fill + thin outline ─────
+  {
+    ...point, id: "run-area-fill", type: "fill", minzoom: 10,
+    filter: ["all", ["to-boolean", ["get", "is_area"]], notTrack],
+    paint: {
+      "fill-color": COLORS.area,
+      "fill-opacity": 0.22,
+    },
+  },
+  {
+    ...line, id: "run-area", minzoom: 10,
+    filter: ["all", ["to-boolean", ["get", "is_area"]], notTrack],
+    layout: { "line-cap": "round", "line-join": "round" },
+    paint: {
+      "line-color": COLORS.area,
+      "line-width": ["interpolate", ["linear"], ["zoom"], 10, 0.6, 14, 1.2, 16, 1.8],
+      "line-opacity": 0.75,
+    },
+  },
+
+  // ── Running tracks (leisure=track) — the core, drawn bold on top ──────────
+  {
+    ...line, id: "run-track-casing",
+    filter: ["to-boolean", ["get", "is_track"]],
+    layout: { "line-cap": "round", "line-join": "round" },
+    paint: {
+      "line-color": "#ffffff",
+      "line-width": ["interpolate", ["linear"], ["zoom"], 6, 2.4, 12, 4, 16, 6],
+      "line-opacity": 0.7,
+    },
+  },
+  {
+    ...line, id: "run-track",
+    filter: ["to-boolean", ["get", "is_track"]],
+    layout: { "line-cap": "round", "line-join": "round" },
+    paint: {
+      "line-color": COLORS.track,
+      "line-width": ["interpolate", ["linear"], ["zoom"], 6, 1.4, 12, 2.6, 16, 4],
+      "line-opacity": 0.95,
+    },
+  },
+
+  // ── Steps overlay — wider, sparse black dashes ────────────────────────────
   {
     ...line, id: "run-steps",
     minzoom: 13,
@@ -73,17 +118,17 @@ export const overlayLayers: LayerSpecification[] = [
     layout: { "line-cap": "butt" },
     paint: {
       "line-color": COLORS.steps,
-      "line-width": ["interpolate", ["linear"], ["zoom"], 13, 3, 16, 6],
-      "line-dasharray": [1, 1],
-      "line-opacity": 0.95,
+      "line-width": ["interpolate", ["linear"], ["zoom"], 13, 4, 16, 7],
+      "line-dasharray": [1, 1.2],
+      "line-opacity": 0.9,
     },
   },
 
   // ── Invisible wide hit-area for easy line clicking (esp. mobile) ──────────
   {
     ...line, id: "run-hitbox",
-    filter: ["in", ["get", "foot_tier"], ["literal", ["designated", "allowed"]]],
-    paint: { "line-color": "#000000", "line-width": 18, "line-opacity": 0 },
+    filter: ["==", ["get", "kind"], "line"],
+    paint: { "line-color": "#000000", "line-width": 16, "line-opacity": 0 },
   },
 
   // ── Passable barriers — small grey dot, off by default ────────────────────
@@ -91,7 +136,7 @@ export const overlayLayers: LayerSpecification[] = [
     ...point, id: "barrier-passable", type: "circle", minzoom: 13,
     filter: ["all", ["==", ["get", "kind"], "barrier"], ["==", ["get", "barrier_status"], "passable"]],
     paint: {
-      "circle-radius": ["interpolate", ["linear"], ["zoom"], 13, 2.5, 16, 5],
+      "circle-radius": ["interpolate", ["linear"], ["zoom"], 13, 2, 16, 4],
       "circle-color": COLORS.passable,
       "circle-stroke-color": "#fff",
       "circle-stroke-width": 1,
@@ -99,60 +144,46 @@ export const overlayLayers: LayerSpecification[] = [
     },
   },
 
-  // ── Runner POI circles ────────────────────────────────────────────────────
+  // ── Runner POI — single-style icon markers (icons registered in main.ts) ──
   {
-    ...point, id: "poi-water", type: "circle", minzoom: 12,
+    ...point, id: "poi-water", type: "symbol", minzoom: 12,
     filter: ["all", ["==", ["get", "kind"], "poi"], ["==", ["get", "poi_kind"], "water"]],
-    paint: {
-      "circle-radius": ["interpolate", ["linear"], ["zoom"], 12, 3, 16, 7],
-      "circle-color": COLORS.water,
-      "circle-stroke-color": "#fff", "circle-stroke-width": 1.5, "circle-opacity": 0.95,
-    },
+    layout: poiIcon("poi-water"),
   },
   {
-    ...point, id: "poi-shelter", type: "circle", minzoom: 12,
+    ...point, id: "poi-shelter", type: "symbol", minzoom: 12,
     filter: ["all", ["==", ["get", "kind"], "poi"], ["==", ["get", "poi_kind"], "shelter"]],
-    paint: {
-      "circle-radius": ["interpolate", ["linear"], ["zoom"], 12, 3, 16, 7],
-      "circle-color": COLORS.shelter,
-      "circle-stroke-color": "#fff", "circle-stroke-width": 1.5, "circle-opacity": 0.95,
-    },
+    layout: poiIcon("poi-shelter"),
   },
   {
-    ...point, id: "poi-viewpoint", type: "circle", minzoom: 12,
+    ...point, id: "poi-viewpoint", type: "symbol", minzoom: 12,
     filter: ["all", ["==", ["get", "kind"], "poi"], ["==", ["get", "poi_kind"], "viewpoint"]],
-    paint: {
-      "circle-radius": ["interpolate", ["linear"], ["zoom"], 12, 3, 16, 7],
-      "circle-color": COLORS.viewpoint,
-      "circle-stroke-color": "#fff", "circle-stroke-width": 1.5, "circle-opacity": 0.95,
-    },
+    layout: poiIcon("poi-viewpoint"),
   },
   {
-    ...point, id: "poi-toilets", type: "circle", minzoom: 12,
+    ...point, id: "poi-toilets", type: "symbol", minzoom: 12,
     filter: ["all", ["==", ["get", "kind"], "poi"], ["==", ["get", "poi_kind"], "toilets"]],
-    paint: {
-      "circle-radius": ["interpolate", ["linear"], ["zoom"], 12, 3, 16, 7],
-      "circle-color": COLORS.toilets,
-      "circle-stroke-color": "#fff", "circle-stroke-width": 1.5, "circle-opacity": 0.95,
-    },
+    layout: poiIcon("poi-toilets"),
   },
 
-  // ── Blocked barriers — red ✕, drawn on top of everything ──────────────────
-  // Uses the basemap glyph set (Noto) via text-field, so no sprite needed.
+  // ── Blocked barriers — red ✕ icon (drawn in main.ts), on top of everything ─
   {
     ...point, id: "barrier-blocked", type: "symbol", minzoom: 12,
     filter: ["all", ["==", ["get", "kind"], "barrier"], ["==", ["get", "barrier_status"], "blocked"]],
     layout: {
-      "text-field": "✕",
-      "text-font": ["Noto Sans Regular"],
-      "text-size": ["interpolate", ["linear"], ["zoom"], 12, 12, 16, 20],
-      "text-allow-overlap": true,
-      "text-ignore-placement": true,
-    },
-    paint: {
-      "text-color": COLORS.blocked,
-      "text-halo-color": "#ffffff",
-      "text-halo-width": 1.6,
+      "icon-image": "barrier-blocked-icon",
+      "icon-size": ["interpolate", ["linear"], ["zoom"], 12, 0.5, 16, 0.9],
+      "icon-allow-overlap": true,
+      "icon-ignore-placement": true,
     },
   },
 ];
+
+function poiIcon(image: string): LayerSpecification["layout"] {
+  return {
+    "icon-image": image,
+    "icon-size": ["interpolate", ["linear"], ["zoom"], 12, 0.6, 16, 1.05],
+    "icon-allow-overlap": true,
+    "icon-ignore-placement": true,
+  };
+}

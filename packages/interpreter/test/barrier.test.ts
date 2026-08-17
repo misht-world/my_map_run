@@ -29,4 +29,16 @@ describe("interpretBarrier", () => {
   it("kerb (untracked barrier) with no ban → null", () => {
     expect(interpretBarrier({ barrier: "kerb" })).toBeNull();
   });
+  it("door=yes with foot=no → null (building door, not an obstacle)", () => {
+    expect(interpretBarrier({ door: "yes", foot: "no" })).toBeNull();
+  });
+  it("door=hinged → null", () => {
+    expect(interpretBarrier({ door: "hinged" })).toBeNull();
+  });
+  it("barrier=gate with entrance=home → null", () => {
+    expect(interpretBarrier({ barrier: "gate", entrance: "home", access: "private" })).toBeNull();
+  });
+  it("barrier=gate with entrance=yes → null", () => {
+    expect(interpretBarrier({ barrier: "gate", entrance: "yes", foot: "no" })).toBeNull();
+  });
 });

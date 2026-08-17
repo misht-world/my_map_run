@@ -5,10 +5,12 @@ import type { TileProperties } from "@mmr/model";
 import { config } from "./config.js";
 import {
   overlayLayers,
-  DESIGNATED_LAYER_IDS, ALLOWED_LAYER_IDS,
+  TRACK_LAYER_IDS, DESIGNATED_LAYER_IDS, ALLOWED_LAYER_IDS,
   BARRIER_BLOCKED_IDS, BARRIER_PASSABLE_IDS,
   WATER_LAYER_IDS, SHELTER_LAYER_IDS, VIEWPOINT_LAYER_IDS, TOILETS_LAYER_IDS,
+  POI_COLOR,
 } from "./layers.js";
+import { makePoiIcon, makeBarrierIcon, type PoiIconKind } from "./icons.js";
 import { parseCoords } from "./search.js";
 import { parseHash, formatHash, type UrlState, type LayerState } from "./url-state.js";
 import { renderPopup } from "./popup.js";
@@ -29,6 +31,7 @@ interface ToggleDef {
 }
 const el = (id: string) => document.getElementById(id) as HTMLInputElement;
 const toggles: ToggleDef[] = [
+  { key: "tracks",           el: el("toggle-tracks"),     ids: TRACK_LAYER_IDS },
   { key: "designated",       el: el("toggle-designated"), ids: DESIGNATED_LAYER_IDS },
   { key: "allowed",          el: el("toggle-allowed"),    ids: ALLOWED_LAYER_IDS },
   { key: "barriers",         el: el("toggle-barriers"),   ids: BARRIER_BLOCKED_IDS },
@@ -51,7 +54,7 @@ const defaultState: UrlState = {
   lat: config.defaultView.center[1],
   lon: config.defaultView.center[0],
   layers: {
-    designated: true, allowed: true, barriers: true, passableBarriers: false,
+    tracks: true, designated: true, allowed: true, barriers: true, passableBarriers: false,
     water: true, shelter: true, viewpoint: true, toilets: true,
   },
 };
@@ -66,11 +69,33 @@ const savedStyle = (() => {
 })();
 
 // ---------------------------------------------------------------------------
+// Basemap style resolution — OpenFreeMap vector URLs, plus an inline Esri
+// World Imagery raster style for the "satellite" option (free, keyless).
+// ---------------------------------------------------------------------------
+function resolveStyle(value: string): string | maplibregl.StyleSpecification {
+  if (value !== "satellite") return value;
+  return {
+    version: 8,
+    glyphs: "https://fonts.openmaptiles.org/{fontstack}/{range}.pbf",
+    sources: {
+      "esri-imagery": {
+        type: "raster",
+        tiles: ["https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"],
+        tileSize: 256,
+        maxzoom: 19,
+        attribution: "Imagery © Esri, Maxar, Earthstar Geographics",
+      },
+    },
+    layers: [{ id: "esri-imagery", type: "raster", source: "esri-imagery" }],
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Map
 // ---------------------------------------------------------------------------
 const map = new MLMap({
   container: "map",
-  style: savedStyle,
+  style: resolveStyle(savedStyle),
   center: [initial.lon, initial.lat],
   zoom: initial.zoom,
   attributionControl: { compact: true },
@@ -98,16 +123,48 @@ async function loadExtent() {
 
 // Re-add overlay on both initial load and every setStyle() (style.load fires
 // for both; setStyle strips custom sources/layers).
+const POI_KINDS: PoiIconKind[] = ["water", "shelter", "viewpoint", "toilets"];
+
 function addOverlay() {
+  // Register single-style POI icons + the blocked-barrier icon (idempotent
+  // across style reloads, and independent of basemap glyph availability).
+  for (const k of POI_KINDS) {
+    const imgId = "poi-" + k;
+    if (!map.hasImage(imgId)) {
+      map.addImage(imgId, makePoiIcon(k, POI_COLOR).imageData, { pixelRatio: 2 });
+    }
+  }
+  if (!map.hasImage("barrier-blocked-icon")) {
+    map.addImage("barrier-blocked-icon", makeBarrierIcon().imageData, { pixelRatio: 2 });
+  }
+
+  // Dev/preview: a normalized GeoJSON overlay (single city) instead of PMTiles.
+  // MapLibre ignores `source-layer` on GeoJSON sources, but we strip it anyway
+  // so the layer specs stay valid for both source types.
+  const useGeojson = config.geojsonUrl !== "";
   if (!map.getSource("run")) {
-    map.addSource("run", {
-      type: "vector",
-      url: "pmtiles://" + config.pmtilesUrl,
-      attribution: "© OpenStreetMap contributors (ODbL)",
-    });
+    if (useGeojson) {
+      map.addSource("run", {
+        type: "geojson",
+        data: config.geojsonUrl,
+        attribution: "© OpenStreetMap contributors (ODbL)",
+      });
+    } else {
+      map.addSource("run", {
+        type: "vector",
+        url: "pmtiles://" + config.pmtilesUrl,
+        attribution: "© OpenStreetMap contributors (ODbL)",
+      });
+    }
   }
   for (const layer of overlayLayers) {
-    if (!map.getLayer(layer.id)) map.addLayer(layer);
+    if (map.getLayer(layer.id)) continue;
+    if (useGeojson) {
+      const { "source-layer": _sl, ...rest } = layer as typeof layer & { "source-layer"?: string };
+      map.addLayer(rest);
+    } else {
+      map.addLayer(layer);
+    }
   }
 
   loadExtent().then((geo) => {
@@ -151,18 +208,18 @@ const styleSelect = document.getElementById("style-select") as HTMLSelectElement
 if ([...styleSelect.options].some((o) => o.value === savedStyle)) styleSelect.value = savedStyle;
 styleSelect.addEventListener("change", () => {
   try { localStorage.setItem(STYLE_KEY, styleSelect.value); } catch { /* ignore */ }
-  map.setStyle(styleSelect.value, { diff: false });
+  map.setStyle(resolveStyle(styleSelect.value), { diff: false });
 });
 
 // ---------------------------------------------------------------------------
 // Click → popup
 // ---------------------------------------------------------------------------
 const clickLayers = [
-  "run-hitbox",
+  "run-hitbox", "run-area-fill",
   ...BARRIER_BLOCKED_IDS, ...BARRIER_PASSABLE_IDS,
   ...WATER_LAYER_IDS, ...SHELTER_LAYER_IDS, ...VIEWPOINT_LAYER_IDS, ...TOILETS_LAYER_IDS,
 ];
-const hoverLayers = clickLayers.filter((id) => id !== "run-hitbox");
+const hoverLayers = clickLayers.filter((id) => id !== "run-hitbox" && id !== "run-area-fill");
 
 map.on("click", (e) => {
   const features = map.queryRenderedFeatures(e.point, { layers: clickLayers });
@@ -296,6 +353,12 @@ const vData = document.getElementById("v-data");
 const vBuild = document.getElementById("v-build");
 if (vData) vData.textContent = config.dataDate || "unknown";
 if (vBuild) vBuild.textContent = config.buildDate || "dev";
+
+// Fill legend POI swatches with the exact same icons drawn on the map.
+document.querySelectorAll<HTMLElement>(".sw-poi[data-poi]").forEach((elm) => {
+  const kind = elm.dataset["poi"] as PoiIconKind;
+  elm.style.backgroundImage = `url(${makePoiIcon(kind, POI_COLOR).dataUrl})`;
+});
 
 // ---------------------------------------------------------------------------
 // Mobile panel toggle

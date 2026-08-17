@@ -15,6 +15,10 @@ Priority order (first match wins):
 
 1. **Drop** — no `highway`, or a not-built/decommissioned value
    (`construction`, `proposed`, `abandoned`, `razed`, `disused`, `no`).
+1a. **Drop** — `indoor=yes` and `conveying=*` (moving walkways / escalators):
+   excluded from display and routing. **Exception:** corridors
+   (`highway=corridor` or `indoor=corridor`) are kept as `designated` — they
+   are useful running connections through buildings/stations.
 2. **Drop** — `foot=no|private|use_sidepath` (a hard foot ban overrides all).
 3. `highway=motorway|trunk` (+`_link`) → **drop** (no pedestrians), unless
    `foot=yes|designated|permissive` (rare) → `allowed`.
@@ -33,6 +37,20 @@ Priority order (first match wins):
 `is_steps = highway === "steps"` — carried into tiles for a dashed render and,
 later, an "avoid stairs" routing profile.
 
+### Running tracks — `interpretTrack`
+
+`leisure=track` (the "core" of a running map — athletics ovals, park running
+loops) is detected independently of `highway` and flagged `is_track`, rendered
+as a bold distinct line on top. Excluded only for clearly non-running sports
+(`sport=motor|karting|cycling|bmx|horse_racing|ice_skating|…`); `running`,
+`athletics`, `multi`, or no `sport` all qualify.
+
+### Areas — `is_area`
+
+`area=yes` ways and Polygon/MultiPolygon features are kept but rendered as a
+**thin white outline** (their outer ring), not a filled bright line — so
+pedestrian squares read as "open space you can cross" without dominating.
+
 ### Notes / known trade-offs
 
 - Sidewalk tagging is sparse. A busy road with an unmapped sidewalk is
@@ -45,6 +63,10 @@ later, an "avoid stairs" routing profile.
 
 Applied to nodes. Produces `{ status, reason }` or `null`.
 
+- **Skipped entirely** (no marker, even with `foot=no`/`access=private`): any
+  node with a `door=*` tag (building door) or an `entrance=*` tag (building /
+  home entrance, e.g. `barrier=gate` + `entrance=home`). A running route does
+  not pass through house doors.
 - Tracked barrier types: `gate, stile, kissing_gate, turnstile,
   full-height_turnstile, cattle_grid, bollard, block, chain, lift_gate,
   swing_gate, hampshire_gate, wicket_gate, sally_port, hedge, fence, wall,

@@ -46,6 +46,8 @@ export const FootReason = {
   // Exclusion reasons (tier === null)
   NOT_HIGHWAY: "no highway tag",
   NOT_BUILT: "construction|proposed|abandoned|razed|disused",
+  INDOOR: "indoor=yes",
+  CONVEYING: "conveying=* (moving walkway)",
   FOOT_FORBIDDEN: "foot=no|private|use_sidepath",
   MOTORWAY: "highway=motorway|trunk (no pedestrians)",
   ACCESS_FORBIDDEN: "access=no|private (no foot override)",
@@ -92,6 +94,10 @@ export interface TileProperties {
   // kind === "line"
   foot_tier?: FootTier;
   is_steps?: boolean;
+  /** True for a dedicated running track (leisure=track). Rendered distinctly. */
+  is_track?: boolean;
+  /** True for an `area=yes` / polygon feature. Rendered as a thin white outline. */
+  is_area?: boolean;
 
   // kind === "barrier"
   barrier_status?: BarrierStatus;

@@ -19,5 +19,8 @@ Thumbs.db
 .env
 .env.local
 
+# Locally-generated city preview overlays (regenerate via scripts/local-geojson.ts)
+packages/web/public/*.geojson
+
 # Claude Code local settings
 .claude/

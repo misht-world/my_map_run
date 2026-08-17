@@ -110,10 +110,17 @@ jobs:
 
       - name: Build tiles (tippecanoe + pmtiles)
         run: |
+          # --no-tile-size-limit: keep EVERY feature (no density dropping). The
+          # full European pedestrian network is ~94M features / ~6.8 GB geometry,
+          # which cannot fit a 2 GB GitHub-release asset — the resulting PMTiles
+          # is hosted on Cloudflare R2 instead (see docs/HOSTING.md).
+          # maxzoom z12 (browser overzooms for close-up) keeps the file safely
+          # inside R2's free 10 GB tier (~2-3 GB); low zooms stay small via
+          # per-feature tippecanoe.minzoom (normalize.ts). A hard size guard
+          # below aborts the R2 upload if the file ever exceeds the cap.
           tippecanoe --force --layer=run \
-            --minimum-zoom=6 --maximum-zoom=13 \
-            --drop-densest-as-needed --coalesce-densest-as-needed \
-            --maximum-tile-bytes=1000000 \
+            --minimum-zoom=6 --maximum-zoom=12 \
+            --no-tile-size-limit \
             --simplification=10 \
             --read-parallel \
             --attribute-type=osm_id:int \
@@ -161,16 +168,59 @@ jobs:
       - name: Report artifact size
         run: ls -lh data/europe-run.pmtiles data/europe-extent.geojson
 
-      - name: Publish to GitHub Release
+      # Hard guard: never upload something that would blow R2's free 10 GB tier.
+      # Cap defaults to 9 GB (margin under 10). If exceeded, fail loudly so we
+      # rebuild with a lower maxzoom / higher per-feature minzoom.
+      - name: Guard PMTiles size (R2 free-tier budget)
+        env:
+          R2_MAX_BYTES: ${{ vars.R2_MAX_BYTES || '9000000000' }}
+        run: |
+          SIZE=$(stat -c %s data/europe-run.pmtiles)
+          echo "europe-run.pmtiles = $SIZE bytes (cap $R2_MAX_BYTES)"
+          if [[ "$SIZE" -gt "$R2_MAX_BYTES" ]]; then
+            echo "::error::PMTiles ($SIZE bytes) exceeds the R2 budget ($R2_MAX_BYTES). Lower maximum-zoom or raise per-feature minzoom in normalize.ts, then rebuild. NOT uploading."
+            exit 1
+          fi
+
+      # The full PMTiles (~GBs) exceeds GitHub's 2 GB release-asset limit, so it
+      # is uploaded to Cloudflare R2 (S3-compatible; aws-cli is preinstalled on
+      # the runner). Requires repo secrets R2_ACCOUNT_ID / R2_ACCESS_KEY_ID /
+      # R2_SECRET_ACCESS_KEY / R2_BUCKET — see docs/HOSTING.md. If they are not
+      # set yet, this step is skipped (the build still produces the extent).
+      - name: Upload PMTiles to Cloudflare R2
+        env:
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: auto
+          # Newer aws-cli v2 sends checksums R2 rejects; only send when required.
+          AWS_REQUEST_CHECKSUM_CALCULATION: when_required
+          AWS_RESPONSE_CHECKSUM_VALIDATION: when_required
+        run: |
+          if [[ -z "$R2_ACCOUNT_ID" || -z "$R2_BUCKET" || -z "$AWS_ACCESS_KEY_ID" ]]; then
+            echo "::warning::R2 secrets not set — skipping PMTiles upload. See docs/HOSTING.md."
+            exit 0
+          fi
+          aws s3 cp data/europe-run.pmtiles "s3://${R2_BUCKET}/europe-run.pmtiles" \
+            --endpoint-url "https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com" \
+            --content-type application/octet-stream \
+            --no-progress
+          echo "Uploaded europe-run.pmtiles to R2 bucket ${R2_BUCKET}."
+
+      # Publish ONLY the tiny extent + date marker to a GitHub Release. The web
+      # app reads the release tag for the data date and downloads the extent;
+      # the big PMTiles comes from R2.
+      - name: Publish extent + version to GitHub Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           TAG="data-$(date +%Y-%m-%d)"
           if gh release view "$TAG" >/dev/null 2>&1; then
-            gh release upload "$TAG" data/europe-run.pmtiles data/europe-extent.geojson --clobber
+            gh release upload "$TAG" data/europe-extent.geojson --clobber
           else
             gh release create "$TAG" \
               --title "Data snapshot $TAG" \
-              --notes "PMTiles running overlay built from europe-latest.osm.pbf on $(date -u +%Y-%m-%dT%H:%M:%SZ)." \
-              data/europe-run.pmtiles data/europe-extent.geojson
+              --notes "PMTiles running overlay built from europe-latest.osm.pbf on $(date -u +%Y-%m-%dT%H:%M:%SZ). Tiles hosted on Cloudflare R2." \
+              data/europe-extent.geojson
           fi

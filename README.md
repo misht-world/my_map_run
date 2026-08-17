@@ -72,8 +72,10 @@ Both the data pipeline and the website are built by GitHub Actions — your PC
 is not involved.
 
 - **`.github/workflows/data.yml`** — rebuilds the Europe PMTiles overlay
-  monthly (and on manual trigger). Publishes it as a GitHub Release; the web
-  app loads it from `releases/latest/download/…`.
+  monthly (and on manual trigger). The complete tileset (~GBs, kept without
+  dropping) is uploaded to **Cloudflare R2** — it is far over GitHub's 2 GB
+  release-asset limit; only the tiny coverage outline goes to a GitHub Release.
+  One-time R2 setup: [`docs/HOSTING.md`](docs/HOSTING.md).
 - **`.github/workflows/pages.yml`** — rebuilds the static website on every
   push to `main` and after a successful data build, deploys to GitHub Pages.
 

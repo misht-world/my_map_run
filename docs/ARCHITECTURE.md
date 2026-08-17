@@ -17,7 +17,7 @@ dependency.
               │  tippecanoe, pmtiles  (scripts/04-tile.sh)
               ▼
 ┌───────────────────────────────────────────────────────────────┐
-│  Delivery: europe-run.pmtiles on GitHub Releases              │
+│  Delivery: europe-run.pmtiles on Cloudflare R2 (docs/HOSTING)  │
 └─────────────┬─────────────────────────────────────────────────┘
               │  static fetch via pmtiles protocol
               ▼

@@ -26,14 +26,16 @@ osmium export "$IN" -f geojsonseq --add-unique-id=type_id --overwrite \
 echo "[tile] tippecanoe → mbtiles"
 # Layer name 'run' is referenced by the web style (packages/web/src/layers.ts).
 # The runnable network needs higher zoom than the toll map: -Z6 -z14.
+# --no-tile-size-limit keeps EVERY feature (no dropping); the full tileset is
+# hosted on Cloudflare R2 (docs/HOSTING.md), not a 2 GB GitHub release asset.
+# maxzoom z12 keeps it inside R2's free tier; per-feature minzoom (normalize.ts)
+# keeps low zooms small. Browser overzooms for close-up detail.
 tippecanoe \
   --force \
   --layer=run \
   --minimum-zoom=6 \
-  --maximum-zoom=13 \
-  --drop-densest-as-needed \
-  --coalesce-densest-as-needed \
-  --maximum-tile-bytes=1000000 \
+  --maximum-zoom=12 \
+  --no-tile-size-limit \
   --simplification=10 \
   --read-parallel \
   --attribute-type=osm_id:int \

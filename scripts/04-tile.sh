@@ -30,11 +30,12 @@ tippecanoe \
   --force \
   --layer=run \
   --minimum-zoom=6 \
-  --maximum-zoom=14 \
+  --maximum-zoom=12 \
   --drop-densest-as-needed \
   --coalesce-densest-as-needed \
+  --extend-zooms-if-still-dropping \
+  --simplification=12 \
   --read-parallel \
-  --no-tile-size-limit \
   --attribute-type=osm_id:int \
   -o "$MBTILES" \
   "$GEOJSONSEQ"

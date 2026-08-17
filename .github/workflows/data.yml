@@ -111,9 +111,11 @@ jobs:
       - name: Build tiles (tippecanoe + pmtiles)
         run: |
           tippecanoe --force --layer=run \
-            --minimum-zoom=6 --maximum-zoom=14 \
+            --minimum-zoom=6 --maximum-zoom=12 \
             --drop-densest-as-needed --coalesce-densest-as-needed \
-            --read-parallel --no-tile-size-limit \
+            --extend-zooms-if-still-dropping \
+            --simplification=12 \
+            --read-parallel \
             --attribute-type=osm_id:int \
             -o data/europe-run.mbtiles data/europe-enriched.geojsonseq
           pmtiles convert --force data/europe-run.mbtiles data/europe-run.pmtiles

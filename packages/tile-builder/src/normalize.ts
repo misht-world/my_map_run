@@ -46,6 +46,22 @@ const counters = {
   poi: { water: 0, shelter: 0, viewpoint: 0, toilets: 0 },
 };
 
+/**
+ * Per-feature tile min-zoom. Keeping the whole European pedestrian network at
+ * every zoom explodes tile size (a naive build produced 14 GB). Revealing
+ * feature classes progressively as you zoom in keeps low-zoom tiles sparse
+ * (small files) and matches how the data is actually used — you don't need
+ * every footway visible at country scale. tippecanoe reads `feature.tippecanoe`.
+ */
+function tileMinZoom(props: TileProperties): number {
+  if (props.is_track) return 8;               // running tracks — the core, show early
+  if (props.kind === "barrier") return 12;    // gates/✕ only when zoomed in
+  if (props.kind === "poi") return 12;        // water/shelter/… only when zoomed in
+  if (props.is_area) return 11;
+  if (props.foot_tier === "allowed") return 11; // quiet roads — the bulk, reveal later
+  return 10;                                   // designated pedestrian ways
+}
+
 stderr.write("[normalize] starting…\n");
 
 const rl = createInterface({ input: stdin, crlfDelay: Infinity });
@@ -144,7 +160,12 @@ for await (const line of rl) {
   if (!props) continue;
 
   counters.emitted++;
-  stdout.write(JSON.stringify({ type: "Feature", geometry: outGeometry, properties: props }) + "\n");
+  stdout.write(JSON.stringify({
+    type: "Feature",
+    tippecanoe: { minzoom: tileMinZoom(props) },
+    geometry: outGeometry,
+    properties: props,
+  }) + "\n");
 }
 
 stderr.write(`[normalize] done. ${JSON.stringify(counters)}\n`);

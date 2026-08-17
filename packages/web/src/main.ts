@@ -349,8 +349,10 @@ shareBtn.addEventListener("click", async () => {
 // ---------------------------------------------------------------------------
 // Version labels
 // ---------------------------------------------------------------------------
+const vApp = document.getElementById("v-app");
 const vData = document.getElementById("v-data");
 const vBuild = document.getElementById("v-build");
+if (vApp) vApp.textContent = "v" + __APP_VERSION__;
 if (vData) vData.textContent = config.dataDate || "unknown";
 if (vBuild) vBuild.textContent = config.buildDate || "dev";
 

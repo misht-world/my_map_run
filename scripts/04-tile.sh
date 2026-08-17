@@ -30,11 +30,11 @@ tippecanoe \
   --force \
   --layer=run \
   --minimum-zoom=6 \
-  --maximum-zoom=12 \
+  --maximum-zoom=13 \
   --drop-densest-as-needed \
   --coalesce-densest-as-needed \
-  --extend-zooms-if-still-dropping \
-  --simplification=12 \
+  --maximum-tile-bytes=1000000 \
+  --simplification=10 \
   --read-parallel \
   --attribute-type=osm_id:int \
   -o "$MBTILES" \

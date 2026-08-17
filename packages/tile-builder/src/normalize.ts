@@ -54,12 +54,12 @@ const counters = {
  * every footway visible at country scale. tippecanoe reads `feature.tippecanoe`.
  */
 function tileMinZoom(props: TileProperties): number {
-  if (props.is_track) return 8;               // running tracks — the core, show early
+  if (props.is_track) return 6;               // running tracks — the core, show early
   if (props.kind === "barrier") return 12;    // gates/✕ only when zoomed in
   if (props.kind === "poi") return 12;        // water/shelter/… only when zoomed in
-  if (props.is_area) return 11;
-  if (props.foot_tier === "allowed") return 11; // quiet roads — the bulk, reveal later
-  return 10;                                   // designated pedestrian ways
+  if (props.is_area) return 10;
+  if (props.foot_tier === "allowed") return 10; // quiet roads — the bulk
+  return 9;                                    // designated pedestrian ways
 }
 
 stderr.write("[normalize] starting…\n");

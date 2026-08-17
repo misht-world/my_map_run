@@ -4,7 +4,7 @@ import { config } from "./config.js";
 
 const POI_LABELS: Record<string, { icon: string; title: string; hint: string }> = {
   water:     { icon: "💧", title: "Drinking water", hint: "Tap / fountain marked as drinkable in OSM. Verify on site." },
-  shelter:   { icon: "⛺", title: "Shelter / gazebo", hint: "Covered spot to wait out rain or rest." },
+  shelter:   { icon: "⛺", title: "Shelter", hint: "Covered spot to wait out rain or rest." },
   viewpoint: { icon: "👁", title: "Viewpoint", hint: "Scenic outlook worth a detour." },
   toilets:   { icon: "🚻", title: "Toilets", hint: "Public toilets (hours/fee may apply)." },
 };

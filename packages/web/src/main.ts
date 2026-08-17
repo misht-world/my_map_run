@@ -202,14 +202,69 @@ function applyLayerVisibility() {
 for (const t of toggles) t.el.addEventListener("change", applyLayerVisibility);
 
 // ---------------------------------------------------------------------------
-// Basemap style switcher
+// Basemap style switcher — a top-right map control (layers-style button).
+// Hovering/clicking the button reveals the basemap choices, like the
+// familiar "layers" overlay control on other maps.
 // ---------------------------------------------------------------------------
-const styleSelect = document.getElementById("style-select") as HTMLSelectElement;
-if ([...styleSelect.options].some((o) => o.value === savedStyle)) styleSelect.value = savedStyle;
-styleSelect.addEventListener("change", () => {
-  try { localStorage.setItem(STYLE_KEY, styleSelect.value); } catch { /* ignore */ }
-  map.setStyle(resolveStyle(styleSelect.value), { diff: false });
-});
+const STYLE_OPTIONS: { value: string; label: string }[] = [
+  { value: "https://tiles.openfreemap.org/styles/positron", label: "Light" },
+  { value: "https://tiles.openfreemap.org/styles/liberty",  label: "Detailed" },
+  { value: "https://tiles.openfreemap.org/styles/bright",   label: "Bright" },
+  { value: "satellite",                                     label: "Satellite" },
+];
+const LAYERS_ICON =
+  `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" ` +
+  `stroke-width="2" stroke-linecap="round" stroke-linejoin="round">` +
+  `<polygon points="12 2 2 7 12 12 22 7 12 2"></polygon>` +
+  `<polyline points="2 17 12 22 22 17"></polyline>` +
+  `<polyline points="2 12 12 17 22 12"></polyline></svg>`;
+
+function makeStyleControl(): maplibregl.IControl {
+  let container: HTMLElement;
+  return {
+    onAdd() {
+      container = document.createElement("div");
+      container.className = "maplibregl-ctrl maplibregl-ctrl-group style-ctrl";
+
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.title = "Basemap style";
+      btn.setAttribute("aria-label", "Basemap style");
+      btn.className = "style-ctrl-btn";
+      btn.innerHTML = LAYERS_ICON;
+
+      const menu = document.createElement("div");
+      menu.className = "style-ctrl-menu";
+      menu.hidden = true;
+
+      for (const o of STYLE_OPTIONS) {
+        const label = document.createElement("label");
+        const radio = document.createElement("input");
+        radio.type = "radio";
+        radio.name = "basemap";
+        radio.value = o.value;
+        radio.checked = o.value === savedStyle;
+        radio.addEventListener("change", () => {
+          try { localStorage.setItem(STYLE_KEY, o.value); } catch { /* ignore */ }
+          map.setStyle(resolveStyle(o.value), { diff: false });
+          menu.hidden = true;
+        });
+        label.append(radio, document.createTextNode(" " + o.label));
+        menu.appendChild(label);
+      }
+
+      btn.addEventListener("click", (e) => { e.stopPropagation(); menu.hidden = !menu.hidden; });
+      document.addEventListener("click", (e) => {
+        if (!container.contains(e.target as Node)) menu.hidden = true;
+      });
+
+      container.append(btn, menu);
+      return container;
+    },
+    onRemove() { container.remove(); },
+  };
+}
+map.addControl(makeStyleControl(), "top-right");
 
 // ---------------------------------------------------------------------------
 // Click → popup

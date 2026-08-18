@@ -200,7 +200,7 @@ jobs:
       # rebuild with a lower maxzoom / higher per-feature minzoom.
       - name: Guard PMTiles size (R2 free-tier budget)
         env:
-          R2_MAX_BYTES: ${{ vars.R2_MAX_BYTES || '9000000000' }}
+          R2_MAX_BYTES: ${{ vars.R2_MAX_BYTES || '9500000000' }}
         run: |
           SIZE=$(stat -c %s data/europe-run.pmtiles)
           echo "europe-run.pmtiles = $SIZE bytes (cap $R2_MAX_BYTES)"

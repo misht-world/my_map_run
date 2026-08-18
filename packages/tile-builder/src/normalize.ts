@@ -160,9 +160,12 @@ for await (const line of rl) {
   if (!props) continue;
 
   counters.emitted++;
+  // NOTE: per-feature tippecanoe.minzoom temporarily disabled while
+  // diagnosing mass feature dropping in the tile build. tileMinZoom() kept
+  // for re-introduction once the root cause is confirmed.
+  void tileMinZoom;
   stdout.write(JSON.stringify({
     type: "Feature",
-    tippecanoe: { minzoom: tileMinZoom(props) },
     geometry: outGeometry,
     properties: props,
   }) + "\n");

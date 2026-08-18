@@ -143,9 +143,13 @@ jobs:
           # --no-feature-limit keep every feature in the densest city tiles.
           # (Per-feature tippecanoe.minzoom was removed from normalize.ts — it
           # was the bug that dropped ~99.9% of features.) Full tileset → R2.
+          # --full-detail=14: z12 tiles carry z14-level coordinate resolution
+          # (~0.4 m) so lines stay smooth when the browser overzooms, without
+          # extra zoom levels. Cheap now that only z12 is stored.
           tippecanoe --force --layer=run \
             --minimum-zoom=12 --maximum-zoom=12 \
             --no-tile-size-limit --no-feature-limit \
+            --full-detail=14 \
             --read-parallel \
             --attribute-type=osm_id:int \
             -o data/europe-run.mbtiles data/europe-enriched.geojsonseq

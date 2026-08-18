@@ -39,6 +39,7 @@ tippecanoe \
   --maximum-zoom=12 \
   --no-tile-size-limit \
   --no-feature-limit \
+  --full-detail=14 \
   --read-parallel \
   --attribute-type=osm_id:int \
   -o "$MBTILES" \

@@ -23,6 +23,9 @@ describe("interpretBarrier", () => {
   it("standalone access=no node (no barrier) → blocked", () => {
     expect(interpretBarrier({ access: "no" })?.status).toBe("blocked");
   });
+  it("gate with access=customers → blocked", () => {
+    expect(interpretBarrier({ barrier: "gate", access: "customers" })?.status).toBe("blocked");
+  });
   it("plain node with no barrier/access → null", () => {
     expect(interpretBarrier({ amenity: "bench" })).toBeNull();
   });

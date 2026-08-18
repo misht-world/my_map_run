@@ -24,6 +24,13 @@ const ALLOWED_HW = new Set([
   "tertiary", "tertiary_link", "road", "cycleway",
 ]);
 
+// service=* subtypes that are just car-access spurs — not worth showing as
+// runnable (they clutter the map). Excluded from DISPLAY only; a future
+// routing engine still uses them.
+const EXCLUDED_SERVICE = new Set([
+  "driveway", "parking_aisle", "alley", "drive-through", "drive_through",
+]);
+
 const footAllows = (foot: string | undefined): boolean =>
   foot === "yes" || foot === "designated" || foot === "permissive";
 
@@ -79,6 +86,12 @@ export function interpretFoot(tags: OsmTags): FootResult {
     return { tier: null, is_steps: false, reason: FootReason.FOOT_FORBIDDEN };
   }
 
+  // Driveways / parking aisles / alleys — never shown (display only; routing
+  // is separate and still allowed to use them).
+  if (highway === "service" && EXCLUDED_SERVICE.has(tags["service"] ?? "")) {
+    return { tier: null, is_steps: false, reason: FootReason.SERVICE_EXCLUDED };
+  }
+
   const is_steps = highway === "steps";
   const footOk = footAllows(foot);
 
@@ -90,8 +103,8 @@ export function interpretFoot(tags: OsmTags): FootResult {
     return { tier: null, is_steps: false, reason: FootReason.MOTORWAY };
   }
 
-  // access=no/private with no foot override → not runnable.
-  if ((access === "no" || access === "private") && !footOk) {
+  // access=no/private/customers with no foot override → not runnable.
+  if ((access === "no" || access === "private" || access === "customers") && !footOk) {
     return { tier: null, is_steps: false, reason: FootReason.ACCESS_FORBIDDEN };
   }
 

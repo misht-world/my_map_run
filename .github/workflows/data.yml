@@ -136,16 +136,16 @@ jobs:
           # footway segments to zero length at z12 and tippecanoe dropped them
           # as degenerate — that (not the size/feature caps) was flattening the
           # dense network. The default simplification is gentle and keeps them.
-          # Root cause of the near-empty tiles was per-feature tippecanoe.minzoom
-          # (now removed in normalize.ts) — it made tippecanoe drop ~99.9% of
-          # features. With it gone, the default drop rate does the right thing:
-          # maxzoom (z12) keeps EVERY feature (full detail), lower zooms are
-          # thinned for a light overview. --no-tile-size-limit + --no-feature-limit
-          # stop the densest city tiles from being dropped. Full tileset → R2.
+          # Tiles live ONLY at z12 (the overlay is shown from z12 up; the
+          # browser overzooms for closer views). Dropping the z6-11 overview
+          # levels frees space for full-detail geometry. No --simplification →
+          # lines keep all their points (much smoother). --no-tile-size-limit +
+          # --no-feature-limit keep every feature in the densest city tiles.
+          # (Per-feature tippecanoe.minzoom was removed from normalize.ts — it
+          # was the bug that dropped ~99.9% of features.) Full tileset → R2.
           tippecanoe --force --layer=run \
-            --minimum-zoom=6 --maximum-zoom=12 \
+            --minimum-zoom=12 --maximum-zoom=12 \
             --no-tile-size-limit --no-feature-limit \
-            --simplification=8 \
             --read-parallel \
             --attribute-type=osm_id:int \
             -o data/europe-run.mbtiles data/europe-enriched.geojsonseq

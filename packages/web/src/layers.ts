@@ -26,7 +26,10 @@ export const COLORS = {
   passable: "#9e9e9e",
 } as const;
 
-const line = { type: "line" as const, source: SOURCE, "source-layer": SOURCE_LAYER, minzoom: 6 };
+// The overlay only shows once you've zoomed in to a place (z12+) — at lower
+// zooms the whole network is an unreadable mess, and the tiles only exist at
+// z12 anyway. POI/barriers already start at z12, so lines match them.
+const line = { type: "line" as const, source: SOURCE, "source-layer": SOURCE_LAYER, minzoom: 12 };
 const point = { source: SOURCE, "source-layer": SOURCE_LAYER } as const;
 
 const notArea: ExpressionSpecification = ["!", ["to-boolean", ["get", "is_area"]]];
@@ -70,7 +73,7 @@ export const overlayLayers: LayerSpecification[] = [
 
   // ── Areas (pedestrian squares etc.) — translucent fill + thin outline ─────
   {
-    ...point, id: "run-area-fill", type: "fill", minzoom: 10,
+    ...point, id: "run-area-fill", type: "fill", minzoom: 12,
     filter: ["all", ["to-boolean", ["get", "is_area"]], notTrack],
     paint: {
       "fill-color": COLORS.area,
@@ -78,7 +81,7 @@ export const overlayLayers: LayerSpecification[] = [
     },
   },
   {
-    ...line, id: "run-area", minzoom: 10,
+    ...line, id: "run-area", minzoom: 12,
     filter: ["all", ["to-boolean", ["get", "is_area"]], notTrack],
     layout: { "line-cap": "round", "line-join": "round" },
     paint: {
@@ -113,7 +116,7 @@ export const overlayLayers: LayerSpecification[] = [
   // ── Steps overlay — wider, sparse black dashes ────────────────────────────
   {
     ...line, id: "run-steps",
-    minzoom: 13,
+    minzoom: 12,
     filter: ["to-boolean", ["get", "is_steps"]],
     layout: { "line-cap": "butt" },
     paint: {
@@ -133,7 +136,7 @@ export const overlayLayers: LayerSpecification[] = [
 
   // ── Passable barriers — small grey dot, off by default ────────────────────
   {
-    ...point, id: "barrier-passable", type: "circle", minzoom: 13,
+    ...point, id: "barrier-passable", type: "circle", minzoom: 12,
     filter: ["all", ["==", ["get", "kind"], "barrier"], ["==", ["get", "barrier_status"], "passable"]],
     paint: {
       "circle-radius": ["interpolate", ["linear"], ["zoom"], 13, 2, 16, 4],

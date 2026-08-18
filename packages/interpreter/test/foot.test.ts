@@ -61,6 +61,21 @@ describe("interpretFoot — excluded (no line)", () => {
   it("access=private without foot override → null", () => {
     expect(interpretFoot({ highway: "service", access: "private" }).tier).toBeNull();
   });
+  it("access=customers without foot override → null", () => {
+    expect(interpretFoot({ highway: "residential", access: "customers" }).tier).toBeNull();
+  });
+  it("service=driveway → null", () => {
+    expect(interpretFoot({ highway: "service", service: "driveway" }).tier).toBeNull();
+  });
+  it("service=parking_aisle → null", () => {
+    expect(interpretFoot({ highway: "service", service: "parking_aisle" }).tier).toBeNull();
+  });
+  it("service=alley → null", () => {
+    expect(interpretFoot({ highway: "service", service: "alley" }).tier).toBeNull();
+  });
+  it("plain service (no subtype) still allowed", () => {
+    expect(interpretFoot({ highway: "service" }).tier).toBe("allowed");
+  });
   it("secondary without sidewalk → null (busy road, avoid)", () => {
     expect(interpretFoot({ highway: "secondary" }).tier).toBeNull();
   });

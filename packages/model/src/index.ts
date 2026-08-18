@@ -48,6 +48,7 @@ export const FootReason = {
   NOT_BUILT: "construction|proposed|abandoned|razed|disused",
   INDOOR: "indoor=yes",
   CONVEYING: "conveying=* (moving walkway)",
+  SERVICE_EXCLUDED: "service=driveway|parking_aisle|alley",
   FOOT_FORBIDDEN: "foot=no|private|use_sidepath",
   MOTORWAY: "highway=motorway|trunk (no pedestrians)",
   ACCESS_FORBIDDEN: "access=no|private (no foot override)",

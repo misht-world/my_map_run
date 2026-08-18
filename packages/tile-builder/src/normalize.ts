@@ -115,7 +115,10 @@ for await (const line of rl) {
   const isLineLike = geomType === "LineString" || geomType === "MultiLineString"
     || geomType === "Polygon" || geomType === "MultiPolygon";
   const isPoint = geomType === "Point";
-  const isAreaFeature = geomType === "Polygon" || geomType === "MultiPolygon" || tags["area"] === "yes";
+  // Only an explicit area=yes is a fill. Closed ways (e.g. a footway=sidewalk
+  // loop) that osmium happens to export as a Polygon stay LINES — their ring
+  // is drawn by the line layers, not filled.
+  const isAreaFeature = tags["area"] === "yes";
 
   let props: TileProperties | null = null;
   let outGeometry: unknown = feat.geometry;

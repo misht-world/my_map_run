@@ -31,7 +31,7 @@ export function interpretBarrier(tags: OsmTags): BarrierResult | null {
   const access = tags["access"];
 
   const footBanned = foot === "no" || foot === "private";
-  const accessBanned = access === "no" || access === "private";
+  const accessBanned = access === "no" || access === "private" || access === "customers";
   const footOk = footAllows(foot);
 
   const isTrackedBarrier = barrier !== undefined && TRACKED_BARRIERS.has(barrier);

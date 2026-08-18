@@ -35,7 +35,7 @@ echo "[tile] tippecanoe → mbtiles"
 tippecanoe \
   --force \
   --layer=run \
-  --minimum-zoom=6 \
+  --minimum-zoom=12 \
   --maximum-zoom=12 \
   --no-tile-size-limit \
   --no-feature-limit \

@@ -110,17 +110,20 @@ jobs:
 
       - name: Build tiles (tippecanoe + pmtiles)
         run: |
-          # --no-tile-size-limit: keep EVERY feature (no density dropping). The
-          # full European pedestrian network is ~94M features / ~6.8 GB geometry,
-          # which cannot fit a 2 GB GitHub-release asset — the resulting PMTiles
-          # is hosted on Cloudflare R2 instead (see docs/HOSTING.md).
-          # maxzoom z12 (browser overzooms for close-up) keeps the file safely
-          # inside R2's free 10 GB tier (~2-3 GB); low zooms stay small via
-          # per-feature tippecanoe.minzoom (normalize.ts). A hard size guard
-          # below aborts the R2 upload if the file ever exceeds the cap.
+          # Keep EVERY feature — no density dropping. BOTH overflow triggers
+          # must be disabled: --no-tile-size-limit (byte cap) AND
+          # --no-feature-limit (the 200k-features/tile cap). With only the byte
+          # cap off, dense city tiles still blew past the feature cap and
+          # tippecanoe raised a global drop rate that nuked ~99.9% of features
+          # even at maxzoom. The full tileset is hosted on Cloudflare R2 (see
+          # docs/HOSTING.md), not a 2 GB GitHub release asset.
+          # maxzoom z12 (browser overzooms for close-up) keeps the file inside
+          # R2's free 10 GB tier; low zooms stay small via per-feature
+          # tippecanoe.minzoom (normalize.ts). The size guard below aborts the
+          # upload if the file ever approaches the cap.
           tippecanoe --force --layer=run \
             --minimum-zoom=6 --maximum-zoom=12 \
-            --no-tile-size-limit \
+            --no-tile-size-limit --no-feature-limit \
             --simplification=10 \
             --read-parallel \
             --attribute-type=osm_id:int \

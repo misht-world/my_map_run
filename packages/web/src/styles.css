@@ -5,7 +5,7 @@
   --muted: #666;
   --accent: #00897b;
 
-  --runnable: #7c1fff;
+  --norun: #e53935;
   --track: #ff6d00;
   --steps: #000000;
   --blocked: #d50000;
@@ -94,6 +94,10 @@ details.block > .block-body { padding-top: 6px; }
 .sw { width: 22px; height: 4px; border-radius: 2px; flex-shrink: 0; }
 /* Swatches reused inside the layer toggles need inline alignment. */
 .block label .sw { display: inline-block; vertical-align: middle; margin: 0 7px 0 5px; }
+.sw-norun {
+  height: 4px;
+  background: repeating-linear-gradient(90deg, var(--norun) 0 5px, transparent 5px 8px);
+}
 .sw-track { background: var(--track); height: 5px; }
 .sw-designated { background: var(--runnable); height: 5px; }
 .sw-allowed { background: var(--runnable); opacity: 0.4; height: 5px; }

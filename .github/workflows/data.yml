@@ -125,16 +125,6 @@ jobs:
       - name: Clean up raw export (save disk)
         run: rm -f data/europe-raw.geojsonseq data/europe-filtered.osm.pbf
 
-      - name: Prune short dead-end spurs
-        env:
-          DEADEND_MAX_M: ${{ vars.DEADEND_MAX_M || '30' }}
-        run: |
-          npx tsx packages/tile-builder/src/prune-deadends.ts \
-            data/europe-enriched.geojsonseq data/europe-pruned.geojsonseq
-          rm -f data/europe-enriched.geojsonseq
-          echo "Pruned GeoJSONSeq size:"; ls -lh data/europe-pruned.geojsonseq
-          echo "Line count:"; wc -l < data/europe-pruned.geojsonseq
-
       - name: Build tiles (tippecanoe + pmtiles)
         run: |
           # Keep EVERY feature — no density dropping. BOTH overflow triggers
@@ -168,9 +158,9 @@ jobs:
             --full-detail=16 \
             --read-parallel \
             --attribute-type=osm_id:int \
-            -o data/europe-run.mbtiles data/europe-pruned.geojsonseq
+            -o data/europe-run.mbtiles data/europe-enriched.geojsonseq
           pmtiles convert --force data/europe-run.mbtiles data/europe-run.pmtiles
-          rm -f data/europe-run.mbtiles data/europe-pruned.geojsonseq
+          rm -f data/europe-run.mbtiles data/europe-enriched.geojsonseq
 
       # Convert Geofabrik's europe.poly (the exact source-extract extent)
       # into a GeoJSON MultiPolygon. The web app draws it as a dashed outline
@@ -215,61 +205,20 @@ jobs:
           ls -lh data/europe-run.pmtiles
           ls -lh data/europe-extent.geojson 2>/dev/null || true
 
-      # Hard guard: never upload something that would blow R2's free 10 GB tier.
-      # Cap defaults to 9 GB (margin under 10). If exceeded, fail loudly so we
-      # rebuild with a lower maxzoom / higher per-feature minzoom.
-      - name: Guard PMTiles size (R2 free-tier budget)
-        env:
-          R2_MAX_BYTES: ${{ vars.R2_MAX_BYTES || '9500000000' }}
-        run: |
-          SIZE=$(stat -c %s data/europe-run.pmtiles)
-          echo "europe-run.pmtiles = $SIZE bytes (cap $R2_MAX_BYTES)"
-          if [[ "$SIZE" -gt "$R2_MAX_BYTES" ]]; then
-            echo "::error::PMTiles ($SIZE bytes) exceeds the R2 budget ($R2_MAX_BYTES). Lower maximum-zoom or raise per-feature minzoom in normalize.ts, then rebuild. NOT uploading."
-            exit 1
-          fi
-
-      # The full PMTiles (~GBs) exceeds GitHub's 2 GB release-asset limit, so it
-      # is uploaded to Cloudflare R2 (S3-compatible; aws-cli is preinstalled on
-      # the runner). Requires repo secrets R2_ACCOUNT_ID / R2_ACCESS_KEY_ID /
-      # R2_SECRET_ACCESS_KEY / R2_BUCKET — see docs/HOSTING.md. If they are not
-      # set yet, this step is skipped (the build still produces the extent).
-      - name: Upload PMTiles to Cloudflare R2
-        env:
-          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
-          R2_BUCKET: ${{ secrets.R2_BUCKET }}
-          AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
-          AWS_DEFAULT_REGION: auto
-          OUT_NAME: ${{ inputs.out_name || 'europe-run.pmtiles' }}
-          # Newer aws-cli v2 sends checksums R2 rejects; only send when required.
-          AWS_REQUEST_CHECKSUM_CALCULATION: when_required
-          AWS_RESPONSE_CHECKSUM_VALIDATION: when_required
-        run: |
-          if [[ -z "$R2_ACCOUNT_ID" || -z "$R2_BUCKET" || -z "$AWS_ACCESS_KEY_ID" ]]; then
-            echo "::warning::R2 secrets not set — skipping PMTiles upload. See docs/HOSTING.md."
-            exit 0
-          fi
-          aws s3 cp data/europe-run.pmtiles "s3://${R2_BUCKET}/${OUT_NAME}" \
-            --endpoint-url "https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com" \
-            --content-type application/octet-stream \
-            --no-progress
-          echo "Uploaded ${OUT_NAME} to R2 bucket ${R2_BUCKET}."
-
-      # Publish ONLY the tiny extent + date marker to a GitHub Release. The web
-      # app reads the release tag for the data date and downloads the extent;
-      # the big PMTiles comes from R2.
-      - name: Publish extent + version to GitHub Release
+      # The inverted overlay is small (only no-run ways, tracks, steps,
+      # barriers, POI), so it fits GitHub's 2 GB release-asset limit — publish
+      # the PMTiles + extent to a GitHub Release (no external storage needed).
+      - name: Publish to GitHub Release
         if: ${{ inputs.out_name == '' || inputs.out_name == 'europe-run.pmtiles' }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           TAG="data-$(date +%Y-%m-%d)"
           if gh release view "$TAG" >/dev/null 2>&1; then
-            gh release upload "$TAG" data/europe-extent.geojson --clobber
+            gh release upload "$TAG" data/europe-run.pmtiles data/europe-extent.geojson --clobber
           else
             gh release create "$TAG" \
               --title "Data snapshot $TAG" \
-              --notes "PMTiles running overlay built from europe-latest.osm.pbf on $(date -u +%Y-%m-%dT%H:%M:%SZ). Tiles hosted on Cloudflare R2." \
-              data/europe-extent.geojson
+              --notes "Running overlay built from europe-latest.osm.pbf on $(date -u +%Y-%m-%dT%H:%M:%SZ)." \
+              data/europe-run.pmtiles data/europe-extent.geojson
           fi

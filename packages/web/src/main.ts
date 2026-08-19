@@ -5,7 +5,7 @@ import type { TileProperties } from "@mmr/model";
 import { config } from "./config.js";
 import {
   overlayLayers,
-  TRACK_LAYER_IDS, DESIGNATED_LAYER_IDS, ALLOWED_LAYER_IDS,
+  BLOCKED_LAYER_IDS, TRACK_LAYER_IDS, STEPS_LAYER_IDS,
   BARRIER_BLOCKED_IDS, BARRIER_PASSABLE_IDS,
   WATER_LAYER_IDS, SHELTER_LAYER_IDS, VIEWPOINT_LAYER_IDS, TOILETS_LAYER_IDS,
   POI_COLOR,
@@ -31,9 +31,9 @@ interface ToggleDef {
 }
 const el = (id: string) => document.getElementById(id) as HTMLInputElement;
 const toggles: ToggleDef[] = [
+  { key: "noRun",            el: el("toggle-norun"),      ids: BLOCKED_LAYER_IDS },
   { key: "tracks",           el: el("toggle-tracks"),     ids: TRACK_LAYER_IDS },
-  { key: "designated",       el: el("toggle-designated"), ids: DESIGNATED_LAYER_IDS },
-  { key: "allowed",          el: el("toggle-allowed"),    ids: ALLOWED_LAYER_IDS },
+  { key: "steps",            el: el("toggle-steps"),      ids: STEPS_LAYER_IDS },
   { key: "barriers",         el: el("toggle-barriers"),   ids: BARRIER_BLOCKED_IDS },
   { key: "passableBarriers", el: el("toggle-passable"),   ids: BARRIER_PASSABLE_IDS },
   { key: "water",            el: el("toggle-water"),      ids: WATER_LAYER_IDS },
@@ -54,7 +54,7 @@ const defaultState: UrlState = {
   lat: config.defaultView.center[1],
   lon: config.defaultView.center[0],
   layers: {
-    tracks: true, designated: true, allowed: true, barriers: true, passableBarriers: false,
+    noRun: true, tracks: true, steps: true, barriers: true, passableBarriers: false,
     water: true, shelter: true, viewpoint: true, toilets: true,
   },
 };
@@ -72,22 +72,31 @@ const savedStyle = (() => {
 // Basemap style resolution — OpenFreeMap vector URLs, plus an inline Esri
 // World Imagery raster style for the "satellite" option (free, keyless).
 // ---------------------------------------------------------------------------
-function resolveStyle(value: string): string | maplibregl.StyleSpecification {
-  if (value !== "satellite") return value;
+function rasterStyle(id: string, tiles: string[], maxzoom: number, attribution: string): maplibregl.StyleSpecification {
   return {
     version: 8,
     glyphs: "https://fonts.openmaptiles.org/{fontstack}/{range}.pbf",
-    sources: {
-      "esri-imagery": {
-        type: "raster",
-        tiles: ["https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"],
-        tileSize: 256,
-        maxzoom: 19,
-        attribution: "Imagery © Esri, Maxar, Earthstar Geographics",
-      },
-    },
-    layers: [{ id: "esri-imagery", type: "raster", source: "esri-imagery" }],
+    sources: { [id]: { type: "raster", tiles, tileSize: 256, maxzoom, attribution } },
+    layers: [{ id, type: "raster", source: id }],
   };
+}
+
+function resolveStyle(value: string): string | maplibregl.StyleSpecification {
+  if (value === "satellite") {
+    return rasterStyle(
+      "esri-imagery",
+      ["https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}"],
+      19, "Imagery © Esri, Maxar, Earthstar Geographics",
+    );
+  }
+  if (value === "cyclosm") {
+    return rasterStyle(
+      "cyclosm",
+      ["a", "b", "c"].map((s) => `https://${s}.tile-cyclosm.openstreetmap.fr/cyclosm/{z}/{x}/{y}.png`),
+      20, "© OpenStreetMap contributors · CyclOSM",
+    );
+  }
+  return value;
 }
 
 // ---------------------------------------------------------------------------
@@ -215,6 +224,7 @@ for (const t of toggles) t.el.addEventListener("change", applyLayerVisibility);
 // ---------------------------------------------------------------------------
 const STYLE_OPTIONS: { value: string; label: string }[] = [
   { value: "https://tiles.openfreemap.org/styles/bright",   label: "Bright" },
+  { value: "cyclosm",                                       label: "CyclOSM (paths)" },
   { value: "https://tiles.openfreemap.org/styles/positron", label: "Light" },
   { value: "https://tiles.openfreemap.org/styles/liberty",  label: "Detailed" },
   { value: "satellite",                                     label: "Satellite" },

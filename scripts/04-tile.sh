@@ -24,9 +24,6 @@ osmium export "$IN" -f geojsonseq --add-unique-id=type_id --overwrite \
   | npx tsx packages/tile-builder/src/normalize.ts \
   > "$GEOJSONSEQ"
 
-echo "[tile] pruning short dead-end spurs"
-npx tsx packages/tile-builder/src/prune-deadends.ts "$GEOJSONSEQ" "$PRUNED"
-
 echo "[tile] tippecanoe → mbtiles"
 # Layer name 'run' is referenced by the web style (packages/web/src/layers.ts).
 # The runnable network needs higher zoom than the toll map: -Z6 -z14.
@@ -47,7 +44,7 @@ tippecanoe \
   --read-parallel \
   --attribute-type=osm_id:int \
   -o "$MBTILES" \
-  "$PRUNED"
+  "$GEOJSONSEQ"
 
 echo "[tile] mbtiles → pmtiles"
 pmtiles convert --force "$MBTILES" "$PMTILES"

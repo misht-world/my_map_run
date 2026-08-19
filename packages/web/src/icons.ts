@@ -53,16 +53,16 @@ export function makePoiIcon(kind: PoiIconKind, color: string): { imageData: Imag
       break;
     }
     case "viewpoint": {
-      // Flower — six white petals around a chip-colour centre.
-      const pr = 6;
-      for (let i = 0; i < 6; i++) {
-        const a = (Math.PI / 3) * i;
+      // Flower — five rounded white petals around a chip-colour centre.
+      const pr = 6.5, petal = 5;
+      for (let i = 0; i < 5; i++) {
+        const a = -Math.PI / 2 + (2 * Math.PI / 5) * i;
         ctx.beginPath();
-        ctx.arc(cx + Math.cos(a) * pr, cy + Math.sin(a) * pr, 4, 0, Math.PI * 2);
+        ctx.arc(cx + Math.cos(a) * pr, cy + Math.sin(a) * pr, petal, 0, Math.PI * 2);
         ctx.fill();
       }
       ctx.beginPath();
-      ctx.arc(cx, cy, 3.6, 0, Math.PI * 2);
+      ctx.arc(cx, cy, 3.8, 0, Math.PI * 2);
       ctx.fillStyle = color;
       ctx.fill();
       break;

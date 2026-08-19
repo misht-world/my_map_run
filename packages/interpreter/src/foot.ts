@@ -1,32 +1,11 @@
-import { type OsmTags, type FootResult, FootReason } from "@mmr/model";
+import { type OsmTags, type NoRunResult, NoRunReason } from "@mmr/model";
 
-// Highways that are never runnable — fast, high-speed motor roads.
+// Big motor roads pedestrians can't run on.
 const MOTOR_ONLY = new Set([
   "motorway", "motorway_link", "trunk", "trunk_link",
 ]);
 
-// Not-yet-built / decommissioned highway values → no line.
-const NON_ROAD = new Set([
-  "construction", "proposed", "planned", "razed",
-  "abandoned", "disused", "no", "elevator", "escalator",
-]);
-
-// Explicitly-for-pedestrians highway classes → `designated` tier.
-const DESIGNATED_HW = new Set([
-  "footway", "path", "pedestrian", "steps", "track", "bridleway",
-  "corridor", "via_ferrata",
-]);
-
-// Quiet vehicle roads where foot is legal but not confirmed by a sidewalk
-// → `allowed` tier (dimmer, separate toggle).
-const ALLOWED_HW = new Set([
-  "residential", "living_street", "service", "unclassified",
-  "tertiary", "tertiary_link", "road", "cycleway",
-]);
-
-// service=* subtypes that are just car-access spurs — not worth showing as
-// runnable (they clutter the map). Excluded from DISPLAY only; a future
-// routing engine still uses them.
+// service=* spurs we never show at all (neither as no-run nor otherwise).
 const EXCLUDED_SERVICE = new Set([
   "driveway", "parking_aisle", "alley", "drive-through", "drive_through",
 ]);
@@ -34,100 +13,42 @@ const EXCLUDED_SERVICE = new Set([
 const footAllows = (foot: string | undefined): boolean =>
   foot === "yes" || foot === "designated" || foot === "permissive";
 
-const footForbids = (foot: string | undefined): boolean =>
-  foot === "no" || foot === "private" || foot === "use_sidepath";
-
-/** True when the way itself carries a mapped sidewalk (not `no`/`separate`). */
-function hasSidewalk(tags: OsmTags): boolean {
-  const s = tags["sidewalk"];
-  if (s && (s === "yes" || s === "both" || s === "left" || s === "right")) {
-    return true;
-  }
-  for (const k of ["sidewalk:both", "sidewalk:left", "sidewalk:right"]) {
-    const v = tags[k];
-    if (v && v !== "no" && v !== "none" && v !== "separate") return true;
-  }
-  return false;
-}
-
 /**
- * Interpret OSM tags of a way into a runnable-path result.
+ * Policy (inverted): we no longer draw the whole runnable network — the
+ * basemap shows walkable paths. Instead we overlay only the ways you
+ * **cannot** run on, as a warning (red dashed). Everything runnable is
+ * simply not emitted. Routing (later) decides the actual route.
  *
- * Returns `{ tier: null }` when the way is not runnable (the caller drops it
- * from the overlay). See docs/TAG_INTERPRETATION.md for rationale.
+ * Returns `{ blocked: true }` for a way a runner cannot use:
+ *   - foot = no / private / use_sidepath, or
+ *   - access = no / private / customers (without a foot override), or
+ *   - a motorway / trunk (+links).
+ * `foot = yes|designated|permissive` overrides everything → not blocked.
+ * Driveways / parking aisles / alleys are never emitted.
  */
-export function interpretFoot(tags: OsmTags): FootResult {
+export function interpretNoRun(tags: OsmTags): NoRunResult {
   const highway = tags["highway"];
+  if (!highway) return { blocked: false, reason: null };
+
+  const service = tags["service"];
+  if (highway === "service" && service !== undefined && EXCLUDED_SERVICE.has(service)) {
+    return { blocked: false, reason: null };
+  }
+
   const foot = tags["foot"];
   const access = tags["access"];
-  const indoor = tags["indoor"];
 
-  // Corridors (indoor connecting passages) are useful running links and are
-  // kept even when tagged indoor — via highway=corridor or indoor=corridor.
-  const isCorridor = highway === "corridor" || indoor === "corridor";
+  // A positive foot permission means you CAN run — never a warning.
+  if (footAllows(foot)) return { blocked: false, reason: null };
 
-  if (!highway && !isCorridor) {
-    return { tier: null, is_steps: false, reason: FootReason.NOT_HIGHWAY };
+  if (foot === "no" || foot === "private" || foot === "use_sidepath") {
+    return { blocked: true, reason: NoRunReason.FOOT_FORBIDDEN };
   }
-  if (highway && NON_ROAD.has(highway)) {
-    return { tier: null, is_steps: false, reason: FootReason.NOT_BUILT };
+  if (access === "no" || access === "private" || access === "customers") {
+    return { blocked: true, reason: NoRunReason.ACCESS_FORBIDDEN };
   }
-  // Indoor ways are excluded — except corridors (see above).
-  if (indoor === "yes" && !isCorridor) {
-    return { tier: null, is_steps: false, reason: FootReason.INDOOR };
+  if (MOTOR_ONLY.has(highway)) {
+    return { blocked: true, reason: NoRunReason.MOTORWAY };
   }
-  // Moving walkways / escalators.
-  if (tags["conveying"] !== undefined && tags["conveying"] !== "no") {
-    return { tier: null, is_steps: false, reason: FootReason.CONVEYING };
-  }
-
-  // A hard foot ban overrides everything else.
-  if (footForbids(foot)) {
-    return { tier: null, is_steps: false, reason: FootReason.FOOT_FORBIDDEN };
-  }
-
-  // Driveways / parking aisles / alleys — never shown (display only; routing
-  // is separate and still allowed to use them).
-  if (highway === "service" && EXCLUDED_SERVICE.has(tags["service"] ?? "")) {
-    return { tier: null, is_steps: false, reason: FootReason.SERVICE_EXCLUDED };
-  }
-
-  const is_steps = highway === "steps";
-  const footOk = footAllows(foot);
-
-  // Motorways/trunks: no pedestrians unless foot is explicitly allowed (rare).
-  if (highway && MOTOR_ONLY.has(highway)) {
-    if (footOk) {
-      return { tier: "allowed", is_steps, reason: FootReason.FOOT_DESIGNATED };
-    }
-    return { tier: null, is_steps: false, reason: FootReason.MOTORWAY };
-  }
-
-  // access=no/private/customers with no foot override → not runnable.
-  if ((access === "no" || access === "private" || access === "customers") && !footOk) {
-    return { tier: null, is_steps: false, reason: FootReason.ACCESS_FORBIDDEN };
-  }
-
-  // ── Positive classification, most-confident first ────────────────────────
-  const sidewalk = hasSidewalk(tags);
-
-  if (footOk) {
-    return { tier: "designated", is_steps, reason: FootReason.FOOT_DESIGNATED };
-  }
-  if (isCorridor) {
-    return { tier: "designated", is_steps, reason: FootReason.DESIGNATED_HIGHWAY };
-  }
-  if (highway && DESIGNATED_HW.has(highway)) {
-    return { tier: "designated", is_steps, reason: FootReason.DESIGNATED_HIGHWAY };
-  }
-  if (sidewalk) {
-    return { tier: "designated", is_steps, reason: FootReason.HAS_SIDEWALK };
-  }
-  if (highway && ALLOWED_HW.has(highway)) {
-    return { tier: "allowed", is_steps, reason: FootReason.ALLOWED_DEFAULT };
-  }
-
-  // Busy roads (primary/secondary and their links) without a sidewalk, and
-  // anything else → not shown. Runners should avoid these by default.
-  return { tier: null, is_steps: false, reason: FootReason.NOT_RUNNABLE };
+  return { blocked: false, reason: null };
 }

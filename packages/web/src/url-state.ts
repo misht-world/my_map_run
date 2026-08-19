@@ -10,9 +10,9 @@
  */
 
 export interface LayerState {
+  noRun: boolean;           // red dashed "can't run here"
   tracks: boolean;          // dedicated running tracks (leisure=track)
-  designated: boolean;
-  allowed: boolean;
+  steps: boolean;           // stairs
   barriers: boolean;        // blocked barriers (red ✕)
   passableBarriers: boolean;
   water: boolean;
@@ -29,7 +29,7 @@ export interface UrlState {
 }
 
 const LAYER_KEYS: (keyof LayerState)[] = [
-  "tracks", "designated", "allowed", "barriers", "passableBarriers",
+  "noRun", "tracks", "steps", "barriers", "passableBarriers",
   "water", "shelter", "viewpoint", "toilets",
 ];
 

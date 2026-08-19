@@ -31,16 +31,16 @@
         <details class="block" open>
           <summary>Layers</summary>
           <div class="block-body">
-            <label><input type="checkbox" id="toggle-tracks"     checked /><span class="sw sw-track"></span> Running tracks</label>
-            <label><input type="checkbox" id="toggle-designated" checked /><span class="sw sw-designated"></span> Runnable — pedestrian ways</label>
-            <label><input type="checkbox" id="toggle-allowed"    checked /><span class="sw sw-allowed"></span> Runnable — quiet roads (dim)</label>
-            <label><input type="checkbox" id="toggle-barriers"   checked /><span class="sw sw-blocked"></span> Blocked barriers</label>
-            <label><input type="checkbox" id="toggle-passable"          /><span class="sw sw-passable"></span> Passable barriers</label>
+            <label><input type="checkbox" id="toggle-norun"    checked /><span class="sw sw-norun"></span> Can't run (foot=no / private / motorway)</label>
+            <label><input type="checkbox" id="toggle-tracks"   checked /><span class="sw sw-track"></span> Running tracks</label>
+            <label><input type="checkbox" id="toggle-steps"    checked /><span class="sw sw-steps"></span> Steps / stairs</label>
+            <label><input type="checkbox" id="toggle-barriers" checked /><span class="sw sw-blocked"></span> Blocked barriers</label>
+            <label><input type="checkbox" id="toggle-passable"        /><span class="sw sw-passable"></span> Passable barriers</label>
             <hr>
-            <label><input type="checkbox" id="toggle-water"      checked /><span class="sw sw-poi" data-poi="water"></span> Drinking water</label>
-            <label><input type="checkbox" id="toggle-shelter"    checked /><span class="sw sw-poi" data-poi="shelter"></span> Shelter</label>
-            <label><input type="checkbox" id="toggle-viewpoint"  checked /><span class="sw sw-poi" data-poi="viewpoint"></span> Viewpoints</label>
-            <label><input type="checkbox" id="toggle-toilets"    checked /><span class="sw sw-poi" data-poi="toilets"></span> Toilets</label>
+            <label><input type="checkbox" id="toggle-water"     checked /><span class="sw sw-poi" data-poi="water"></span> Drinking water</label>
+            <label><input type="checkbox" id="toggle-shelter"   checked /><span class="sw sw-poi" data-poi="shelter"></span> Shelter</label>
+            <label><input type="checkbox" id="toggle-viewpoint" checked /><span class="sw sw-poi" data-poi="viewpoint"></span> Viewpoints</label>
+            <label><input type="checkbox" id="toggle-toilets"   checked /><span class="sw sw-poi" data-poi="toilets"></span> Toilets</label>
           </div>
         </details>
 
@@ -49,18 +49,21 @@
           <summary>Legend</summary>
           <div class="block-body">
             <ul class="legend">
+              <li><span class="sw sw-norun"></span> Can't run here (foot=no / private / motorway)</li>
               <li><span class="sw sw-track"></span> Running track (leisure=track)</li>
-              <li><span class="sw sw-designated"></span> Runnable pedestrian way</li>
-              <li><span class="sw sw-allowed"></span> Runnable quiet road (foot OK, no sidewalk mapped)</li>
-              <li><span class="sw sw-area"></span> Pedestrian area (crossable)</li>
               <li><span class="sw sw-steps"></span> Steps / stairs</li>
               <li><span class="sw sw-blocked"></span> Barrier — no pedestrian access</li>
+              <li><span class="sw sw-passable"></span> Passable barrier</li>
               <li><span class="sw sw-poi" data-poi="water"></span> Drinking water</li>
               <li><span class="sw sw-poi" data-poi="shelter"></span> Shelter</li>
               <li><span class="sw sw-poi" data-poi="viewpoint"></span> Viewpoint</li>
               <li><span class="sw sw-poi" data-poi="toilets"></span> Toilets</li>
             </ul>
-            <p class="hint">Click a line or marker for details — status and source links.</p>
+            <p class="hint">
+              The runnable paths themselves are shown by the basemap (try
+              CyclOSM). This overlay only flags where you <em>can't</em> run,
+              plus tracks, steps, barriers and useful points.
+            </p>
           </div>
         </details>
 

@@ -21,7 +21,7 @@
 
 import { createInterface } from "node:readline";
 import { stdin, stdout, stderr } from "node:process";
-import { interpretFoot, interpretBarrier, interpretPoi, interpretTrack } from "@mmr/interpreter";
+import { interpretNoRun, interpretBarrier, interpretPoi, interpretTrack } from "@mmr/interpreter";
 import type { TileProperties } from "@mmr/model";
 
 
@@ -39,28 +39,11 @@ const counters = {
   total: 0,
   emitted: 0,
   parseErrors: 0,
-  line: { designated: 0, allowed: 0 },
-  track: 0,
+  line: { blocked: 0, steps: 0, track: 0 },
   area: 0,
   barrier: { blocked: 0, passable: 0 },
   poi: { water: 0, shelter: 0, viewpoint: 0, toilets: 0 },
 };
-
-/**
- * Per-feature tile min-zoom. Keeping the whole European pedestrian network at
- * every zoom explodes tile size (a naive build produced 14 GB). Revealing
- * feature classes progressively as you zoom in keeps low-zoom tiles sparse
- * (small files) and matches how the data is actually used — you don't need
- * every footway visible at country scale. tippecanoe reads `feature.tippecanoe`.
- */
-function tileMinZoom(props: TileProperties): number {
-  if (props.is_track) return 7;               // running tracks — the core, show early
-  if (props.kind === "barrier") return 12;    // gates/✕ only when zoomed in
-  if (props.kind === "poi") return 12;        // water/shelter/… only when zoomed in
-  if (props.is_area) return 11;
-  if (props.foot_tier === "allowed") return 11; // quiet roads — the bulk
-  return 10;                                   // designated pedestrian ways
-}
 
 stderr.write("[normalize] starting…\n");
 
@@ -124,21 +107,28 @@ for await (const line of rl) {
   let outGeometry: unknown = feat.geometry;
 
   if (isLineLike) {
-    // A dedicated running track (leisure=track) is the "core" of the map and
-    // may not carry a highway tag — check it independently of interpretFoot.
+    // Inverted policy — we emit only:
+    //   • running tracks (leisure=track),
+    //   • steps (highway=steps),
+    //   • "no-run" ways (foot/access ban, motorway) → red dashed warning.
+    // Everything else runnable is NOT drawn (the basemap shows it).
     const track = interpretTrack(tags);
-    const foot = interpretFoot(tags);
-    if (track || foot.tier) {
-      const tier = foot.tier ?? "designated";
-      props = { osm_type: osmType, osm_id: osmId, kind: "line", foot_tier: tier };
-      if (foot.is_steps) props.is_steps = true;
-      if (track) { props.is_track = true; counters.track++; }
-      // Areas keep their Polygon geometry so the web style can fill them
-      // (translucent). Track areas fall through to the track line layer.
-      if (isAreaFeature) { props.is_area = true; counters.area++; }
-      if (foot.tier) counters.line[foot.tier]++;
-      // outGeometry stays feat.geometry (LineString or Polygon as osmium gave it)
+    const isSteps = tags["highway"] === "steps";
+    const noRun = interpretNoRun(tags);
+
+    if (track) {
+      props = { osm_type: osmType, osm_id: osmId, kind: "line", is_track: true };
+      counters.line.track++;
+    } else if (noRun.blocked) {
+      props = { osm_type: osmType, osm_id: osmId, kind: "line", blocked: true };
+      if (isSteps) props.is_steps = true;
+      counters.line.blocked++;
+    } else if (isSteps) {
+      props = { osm_type: osmType, osm_id: osmId, kind: "line", is_steps: true };
+      counters.line.steps++;
     }
+    if (props && isAreaFeature) { props.is_area = true; counters.area++; }
+    // outGeometry stays feat.geometry (LineString or Polygon as osmium gave it)
   } else if (isPoint) {
     // Barrier takes precedence over POI (a blocked gate matters more than a
     // co-located amenity, and they rarely overlap).
@@ -163,10 +153,6 @@ for await (const line of rl) {
   if (!props) continue;
 
   counters.emitted++;
-  // NOTE: per-feature tippecanoe.minzoom temporarily disabled while
-  // diagnosing mass feature dropping in the tile build. tileMinZoom() kept
-  // for re-introduction once the root cause is confirmed.
-  void tileMinZoom;
   stdout.write(JSON.stringify({
     type: "Feature",
     geometry: outGeometry,

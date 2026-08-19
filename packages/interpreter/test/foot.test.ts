@@ -1,106 +1,53 @@
 import { describe, it, expect } from "vitest";
-import { interpretFoot } from "../src/foot.js";
+import { interpretNoRun } from "../src/foot.js";
 
-describe("interpretFoot — designated tier", () => {
-  it("footway → designated", () => {
-    expect(interpretFoot({ highway: "footway" }).tier).toBe("designated");
+describe("interpretNoRun — blocked (red dashed)", () => {
+  it("foot=no → blocked", () => {
+    expect(interpretNoRun({ highway: "footway", foot: "no" }).blocked).toBe(true);
   });
-  it("path → designated", () => {
-    expect(interpretFoot({ highway: "path" }).tier).toBe("designated");
+  it("foot=private → blocked", () => {
+    expect(interpretNoRun({ highway: "path", foot: "private" }).blocked).toBe(true);
   });
-  it("pedestrian → designated", () => {
-    expect(interpretFoot({ highway: "pedestrian" }).tier).toBe("designated");
+  it("foot=use_sidepath → blocked", () => {
+    expect(interpretNoRun({ highway: "residential", foot: "use_sidepath" }).blocked).toBe(true);
   });
-  it("track → designated", () => {
-    expect(interpretFoot({ highway: "track" }).tier).toBe("designated");
+  it("access=private → blocked", () => {
+    expect(interpretNoRun({ highway: "residential", access: "private" }).blocked).toBe(true);
   });
-  it("steps → designated, is_steps=true", () => {
-    const r = interpretFoot({ highway: "steps" });
-    expect(r.tier).toBe("designated");
-    expect(r.is_steps).toBe(true);
+  it("access=no → blocked", () => {
+    expect(interpretNoRun({ highway: "service", access: "no" }).blocked).toBe(true);
   });
-  it("busy road with mapped sidewalk → designated", () => {
-    expect(interpretFoot({ highway: "secondary", sidewalk: "both" }).tier).toBe("designated");
+  it("access=customers → blocked", () => {
+    expect(interpretNoRun({ highway: "service", access: "customers" }).blocked).toBe(true);
   });
-  it("foot=designated on any road → designated", () => {
-    expect(interpretFoot({ highway: "primary", foot: "designated" }).tier).toBe("designated");
+  it("motorway → blocked", () => {
+    expect(interpretNoRun({ highway: "motorway" }).blocked).toBe(true);
   });
-  it("access=private but foot=yes → designated (foot override)", () => {
-    expect(interpretFoot({ highway: "service", access: "private", foot: "yes" }).tier).toBe("designated");
+  it("trunk_link → blocked", () => {
+    expect(interpretNoRun({ highway: "trunk_link" }).blocked).toBe(true);
   });
 });
 
-describe("interpretFoot — allowed tier", () => {
-  it("residential without sidewalk → allowed", () => {
-    expect(interpretFoot({ highway: "residential" }).tier).toBe("allowed");
+describe("interpretNoRun — not blocked (not drawn; basemap shows it)", () => {
+  it("plain footway → not blocked", () => {
+    expect(interpretNoRun({ highway: "footway" }).blocked).toBe(false);
   });
-  it("living_street → allowed", () => {
-    expect(interpretFoot({ highway: "living_street" }).tier).toBe("allowed");
+  it("residential → not blocked", () => {
+    expect(interpretNoRun({ highway: "residential" }).blocked).toBe(false);
   });
-  it("tertiary without sidewalk → allowed", () => {
-    expect(interpretFoot({ highway: "tertiary" }).tier).toBe("allowed");
+  it("foot=yes overrides access=private → not blocked", () => {
+    expect(interpretNoRun({ highway: "service", access: "private", foot: "yes" }).blocked).toBe(false);
   });
-  it("cycleway without foot info → allowed", () => {
-    expect(interpretFoot({ highway: "cycleway" }).tier).toBe("allowed");
+  it("foot=designated overrides → not blocked", () => {
+    expect(interpretNoRun({ highway: "path", foot: "designated" }).blocked).toBe(false);
   });
-});
-
-describe("interpretFoot — excluded (no line)", () => {
-  it("motorway → null", () => {
-    expect(interpretFoot({ highway: "motorway" }).tier).toBeNull();
+  it("no highway tag → not blocked", () => {
+    expect(interpretNoRun({ amenity: "cafe" }).blocked).toBe(false);
   });
-  it("trunk → null", () => {
-    expect(interpretFoot({ highway: "trunk" }).tier).toBeNull();
+  it("service=driveway (excluded) even with access=private → not blocked", () => {
+    expect(interpretNoRun({ highway: "service", service: "driveway", access: "private" }).blocked).toBe(false);
   });
-  it("foot=no overrides a footway → null", () => {
-    expect(interpretFoot({ highway: "footway", foot: "no" }).tier).toBeNull();
-  });
-  it("foot=private → null", () => {
-    expect(interpretFoot({ highway: "path", foot: "private" }).tier).toBeNull();
-  });
-  it("access=private without foot override → null", () => {
-    expect(interpretFoot({ highway: "service", access: "private" }).tier).toBeNull();
-  });
-  it("access=customers without foot override → null", () => {
-    expect(interpretFoot({ highway: "residential", access: "customers" }).tier).toBeNull();
-  });
-  it("service=driveway → null", () => {
-    expect(interpretFoot({ highway: "service", service: "driveway" }).tier).toBeNull();
-  });
-  it("service=parking_aisle → null", () => {
-    expect(interpretFoot({ highway: "service", service: "parking_aisle" }).tier).toBeNull();
-  });
-  it("service=alley → null", () => {
-    expect(interpretFoot({ highway: "service", service: "alley" }).tier).toBeNull();
-  });
-  it("plain service (no subtype) still allowed", () => {
-    expect(interpretFoot({ highway: "service" }).tier).toBe("allowed");
-  });
-  it("secondary without sidewalk → null (busy road, avoid)", () => {
-    expect(interpretFoot({ highway: "secondary" }).tier).toBeNull();
-  });
-  it("primary without sidewalk → null", () => {
-    expect(interpretFoot({ highway: "primary" }).tier).toBeNull();
-  });
-  it("construction → null", () => {
-    expect(interpretFoot({ highway: "construction" }).tier).toBeNull();
-  });
-  it("indoor=yes → null", () => {
-    expect(interpretFoot({ highway: "footway", indoor: "yes" }).tier).toBeNull();
-  });
-  it("highway=corridor + indoor=yes → designated (corridors kept)", () => {
-    expect(interpretFoot({ highway: "corridor", indoor: "yes" }).tier).toBe("designated");
-  });
-  it("indoor=corridor without highway → designated", () => {
-    expect(interpretFoot({ indoor: "corridor" }).tier).toBe("designated");
-  });
-  it("conveying=reversible (moving walkway) → null", () => {
-    expect(interpretFoot({ highway: "footway", conveying: "reversible" }).tier).toBeNull();
-  });
-  it("conveying=yes → null", () => {
-    expect(interpretFoot({ highway: "steps", conveying: "yes" }).tier).toBeNull();
-  });
-  it("no highway tag → null", () => {
-    expect(interpretFoot({ amenity: "cafe" }).tier).toBeNull();
+  it("service=alley (excluded) → not blocked", () => {
+    expect(interpretNoRun({ highway: "service", service: "alley", access: "private" }).blocked).toBe(false);
   });
 });

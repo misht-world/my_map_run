@@ -15,7 +15,7 @@
 
 import { writeFileSync, mkdirSync } from "node:fs";
 import { dirname } from "node:path";
-import { interpretFoot, interpretBarrier, interpretPoi, interpretTrack } from "@mmr/interpreter";
+import { interpretNoRun, interpretBarrier, interpretPoi, interpretTrack } from "@mmr/interpreter";
 import type { TileProperties } from "@mmr/model";
 
 const [s, w, n, e, outPath] = process.argv.slice(2);
@@ -123,8 +123,7 @@ async function main() {
 
   const features: GeoJSON.Feature[] = [];
   const counters = {
-    line: { designated: 0, allowed: 0 },
-    track: 0,
+    line: { blocked: 0, steps: 0, track: 0 },
     area: 0,
     barrier: { blocked: 0, passable: 0 },
     poi: { water: 0, shelter: 0, viewpoint: 0, toilets: 0 },
@@ -137,15 +136,14 @@ async function main() {
 
     if (el.type === "way" && el.geometry && el.geometry.length >= 2) {
       const track = interpretTrack(tags);
-      const foot = interpretFoot(tags);
-      if (track || foot.tier) {
-        const tier = foot.tier ?? "designated";
-        props = { osm_type: "way", osm_id: el.id, kind: "line", foot_tier: tier };
-        if (foot.is_steps) props.is_steps = true;
-        if (track) { props.is_track = true; counters.track++; }
+      const isSteps = tags["highway"] === "steps";
+      const noRun = interpretNoRun(tags);
+      if (track) { props = { osm_type: "way", osm_id: el.id, kind: "line", is_track: true }; counters.line.track++; }
+      else if (noRun.blocked) { props = { osm_type: "way", osm_id: el.id, kind: "line", blocked: true }; if (isSteps) props.is_steps = true; counters.line.blocked++; }
+      else if (isSteps) { props = { osm_type: "way", osm_id: el.id, kind: "line", is_steps: true }; counters.line.steps++; }
+      if (props) {
         const isArea = tags["area"] === "yes";
         if (isArea) { props.is_area = true; counters.area++; }
-        if (foot.tier) counters.line[foot.tier]++;
         const ring = el.geometry.map((p) => [p.lon, p.lat] as [number, number]);
         if (isArea) {
           const first = ring[0]!, last = ring[ring.length - 1]!;
@@ -171,10 +169,9 @@ async function main() {
       }
       if (props) geometry = { type: "Point", coordinates: [el.lon, el.lat] };
     } else if (el.type === "relation" && el.members) {
-      // Multipolygon areas (e.g. highway=pedestrian squares, leisure=track).
+      // Multipolygon running tracks (leisure=track relations).
       const track = interpretTrack(tags);
-      const foot = interpretFoot(tags);
-      if (track || foot.tier) {
+      if (track) {
         const toSeg = (m: { geometry?: { lat: number; lon: number }[] }): Pt[] =>
           (m.geometry ?? []).map((p) => [p.lon, p.lat] as Pt);
         const outer = el.members.filter((m) => m.type === "way" && m.role !== "inner").map(toSeg);
@@ -182,11 +179,9 @@ async function main() {
         const outerRings = assembleRings(outer);
         const innerRings = assembleRings(inner);
         if (outerRings.length) {
-          const tier = foot.tier ?? "designated";
-          props = { osm_type: "relation", osm_id: el.id, kind: "line", foot_tier: tier, is_area: true };
+          props = { osm_type: "relation", osm_id: el.id, kind: "line", is_track: true, is_area: true };
           counters.area++;
-          if (track) { props.is_track = true; counters.track++; }
-          if (foot.tier) counters.line[foot.tier]++;
+          counters.line.track++;
           const coordinates = outerRings.length === 1
             ? [[outerRings[0]!, ...innerRings]]
             : outerRings.map((r) => [r]);

@@ -50,26 +50,26 @@ jobs:
       - name: Build site
         env:
           VITE_BASE: "/my_map_run/"
-          # The overlay PMTiles is hosted on Cloudflare R2 (too big for a GitHub
-          # release asset). R2_PUBLIC_BASE (repo variable) is the bucket's
-          # PUBLIC base URL — the r2.dev domain or a custom domain, NOT the
-          # private S3 endpoint (…r2.cloudflarestorage.com).
-          VITE_PMTILES_URL: "${{ vars.R2_PUBLIC_BASE }}/europe-run.pmtiles"
+          # PMTiles is small again (inverted overlay) — served from the same
+          # Pages origin, so range requests have no CORS/redirect issues.
+          VITE_PMTILES_URL: "/my_map_run/europe-run.pmtiles"
           VITE_EXTENT_URL: "/my_map_run/europe-extent.geojson"
           VITE_DATA_DATE: ${{ steps.data.outputs.tag }}
         run: |
           export VITE_BUILD_DATE="$(date -u +%Y-%m-%d)"
           npm run build
 
-      - name: Download extent (coverage outline) from release
+      - name: Download data assets from release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          echo "Fetching latest extent asset…"
+          echo "Fetching latest release assets…"
           gh release download \
+            --pattern "europe-run.pmtiles" \
             --pattern "europe-extent.geojson" \
             --dir packages/web/dist \
-            2>&1 || echo "WARNING: No release found yet — deploying without the extent outline"
+            2>&1 || echo "WARNING: No release found yet — deploying without data assets"
+          ls -lh packages/web/dist/europe-run.pmtiles 2>/dev/null || true
           ls -lh packages/web/dist/europe-extent.geojson 2>/dev/null || true
 
       - name: Upload artifact

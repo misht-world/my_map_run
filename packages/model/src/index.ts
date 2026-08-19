@@ -10,51 +10,26 @@
  */
 
 // ---------------------------------------------------------------------------
-// Runnable ways — confidence tiers
+// No-run ways (inverted policy)
 //
-// `designated` — explicitly meant for / open to pedestrians (footway, path,
-//   pedestrian, steps, track, bridleway; or foot=yes|designated|permissive;
-//   or a road with a mapped sidewalk). Rendered as a bright line, on by default.
-//
-// `allowed` — foot access is not forbidden but not confirmed by a sidewalk
-//   (quiet roads: residential, living_street, service, unclassified, tertiary,
-//   cycleway). Rendered dimmer, behind its own toggle. This is the
-//   "you can run here, but it isn't mapped as pedestrian" tier.
-//
-// A way that is neither (motorway/trunk, foot=no, access=private without a
-// foot override, primary/secondary without a sidewalk, not-yet-built roads)
-// produces `null` and is dropped from the overlay.
+// We do NOT draw the runnable network any more — the basemap shows walkable
+// paths. We only overlay the ways you CANNOT run on, as a warning (red
+// dashed): foot=no|private|use_sidepath, access=no|private|customers, or a
+// motorway/trunk. `foot=yes|designated|permissive` overrides. Runnable ways
+// are simply not emitted; routing (later) picks the actual route.
 // ---------------------------------------------------------------------------
 
-export type FootTier = "designated" | "allowed";
-
-export interface FootResult {
-  /** Rendering tier, or null when the way is not runnable (drop it). */
-  tier: FootTier | null;
-  /** True for highway=steps — rendered as a dashed overlay; a future
-   *  "avoid stairs" routing profile keys off this. */
-  is_steps: boolean;
-  /** Stable code explaining the decision (for popup + audits). */
-  reason: FootReasonCode | null;
+export interface NoRunResult {
+  blocked: boolean;
+  reason: NoRunReasonCode | null;
 }
 
-export const FootReason = {
-  FOOT_DESIGNATED: "foot=designated|yes|permissive",
-  DESIGNATED_HIGHWAY: "highway=footway|path|pedestrian|steps|track|bridleway",
-  HAS_SIDEWALK: "sidewalk=yes|both|left|right",
-  ALLOWED_DEFAULT: "quiet_road+foot_not_forbidden",
-  // Exclusion reasons (tier === null)
-  NOT_HIGHWAY: "no highway tag",
-  NOT_BUILT: "construction|proposed|abandoned|razed|disused",
-  INDOOR: "indoor=yes",
-  CONVEYING: "conveying=* (moving walkway)",
-  SERVICE_EXCLUDED: "service=driveway|parking_aisle|alley",
+export const NoRunReason = {
   FOOT_FORBIDDEN: "foot=no|private|use_sidepath",
-  MOTORWAY: "highway=motorway|trunk (no pedestrians)",
-  ACCESS_FORBIDDEN: "access=no|private (no foot override)",
-  NOT_RUNNABLE: "busy road without sidewalk / not pedestrian",
+  ACCESS_FORBIDDEN: "access=no|private|customers",
+  MOTORWAY: "highway=motorway|trunk",
 } as const;
-export type FootReasonCode = (typeof FootReason)[keyof typeof FootReason];
+export type NoRunReasonCode = (typeof NoRunReason)[keyof typeof NoRunReason];
 
 // ---------------------------------------------------------------------------
 // Barriers (nodes) — gates / stiles / turnstiles etc.
@@ -93,7 +68,8 @@ export interface TileProperties {
   kind: "line" | "barrier" | "poi";
 
   // kind === "line"
-  foot_tier?: FootTier;
+  /** True for a way you cannot run on (foot/access ban, motorway) → red dashed. */
+  blocked?: boolean;
   is_steps?: boolean;
   /** True for a dedicated running track (leisure=track). Rendered distinctly. */
   is_track?: boolean;
@@ -122,5 +98,5 @@ export type OsmTags = Readonly<Record<string, string>>;
 export interface Segment {
   osm_type: "way" | "relation";
   osm_id: number;
-  foot: FootResult;
+  no_run: NoRunResult;
 }

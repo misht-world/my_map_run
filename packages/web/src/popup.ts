@@ -19,15 +19,9 @@ export function renderPopup(props: TileProperties, lngLat: LngLat): HTMLElement 
     if (props.is_track) {
       lines.push(`<div class="popup-status">🏃 Running track</div>`,
         `<div class="popup-reason">Dedicated running / athletics track (leisure=track).</div>`);
-    } else if (props.foot_tier === "designated") {
-      lines.push(`<div class="popup-status">🏃 Runnable — pedestrian way</div>`,
-        `<div class="popup-reason">Explicitly for / open to pedestrians (footway, path, or a road with a sidewalk).</div>`);
-    } else {
-      lines.push(`<div class="popup-status">🏃 Runnable — quiet road</div>`,
-        `<div class="popup-reason">Foot access is not forbidden, but no sidewalk is mapped. Watch for traffic.</div>`);
-    }
-    if (props.is_area) {
-      lines.push(`<div class="popup-reason">Open area (area=yes) — outline shown.</div>`);
+    } else if (props.blocked) {
+      lines.push(`<div class="popup-status popup-blocked">⛔ Can't run here</div>`,
+        `<div class="popup-reason">Pedestrians are not allowed (foot=no/private, access restricted, or a motorway). Shown as a red dashed warning.</div>`);
     }
     if (props.is_steps) {
       lines.push(`<div class="popup-status">🪜 Steps / stairs</div>`);

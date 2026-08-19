@@ -4,9 +4,9 @@ const SOURCE = "run";
 const SOURCE_LAYER = "run";
 
 // Layer-ID groups exposed for toggle logic in main.ts.
+export const BLOCKED_LAYER_IDS    = ["run-blocked"] as const;
 export const TRACK_LAYER_IDS      = ["run-track-casing", "run-track"] as const;
-export const DESIGNATED_LAYER_IDS = ["run-designated-casing", "run-designated", "run-area-fill", "run-area", "run-steps"] as const;
-export const ALLOWED_LAYER_IDS    = ["run-allowed"] as const;
+export const STEPS_LAYER_IDS      = ["run-steps"] as const;
 export const BARRIER_BLOCKED_IDS  = ["barrier-blocked"] as const;
 export const BARRIER_PASSABLE_IDS = ["barrier-passable"] as const;
 export const WATER_LAYER_IDS      = ["poi-water"] as const;
@@ -18,129 +18,83 @@ export const TOILETS_LAYER_IDS    = ["poi-toilets"] as const;
 export const POI_COLOR = "#37474f"; // blue-grey chip
 
 export const COLORS = {
-  runnable: "#7c1fff", // vivid violet — reads on light, dark, satellite & parks
-  track:    "#ff6d00", // deep orange — dedicated running tracks (the core)
-  steps:    "#000000", // black dashes for stairs
-  area:     "#7c1fff", // translucent fill for area=yes (same hue as runnable)
-  blocked:  "#d50000", // red ✕
-  passable: "#e53935", // red dots for passable barriers
+  noRun:    "#e53935", // red dashed — you cannot run here
+  track:    "#ff6d00", // deep orange — dedicated running tracks
+  steps:    "#000000", // black rungs for stairs
+  blocked:  "#d50000", // red ✕ (blocked barrier)
+  passable: "#e53935", // red dots (passable barrier)
 } as const;
 
-// The overlay only shows once you've zoomed in to a place (z12+) — at lower
-// zooms the whole network is an unreadable mess, and the tiles only exist at
-// z12 anyway. POI/barriers already start at z12, so lines match them.
 const line = { type: "line" as const, source: SOURCE, "source-layer": SOURCE_LAYER, minzoom: 12 };
-const point = { source: SOURCE, "source-layer": SOURCE_LAYER } as const;
+const point = { source: SOURCE, "source-layer": SOURCE_LAYER, minzoom: 12 } as const;
 
-const notArea: ExpressionSpecification = ["!", ["to-boolean", ["get", "is_area"]]];
-const notTrack: ExpressionSpecification = ["!", ["to-boolean", ["get", "is_track"]]];
+const isBlocked: ExpressionSpecification = ["to-boolean", ["get", "blocked"]];
+const isTrack: ExpressionSpecification = ["to-boolean", ["get", "is_track"]];
+const isSteps: ExpressionSpecification = ["to-boolean", ["get", "is_steps"]];
 
 export const overlayLayers: LayerSpecification[] = [
 
-  // ── Allowed tier (quiet roads, no confirmed sidewalk) — dim, drawn first ──
+  // ── No-run ways (foot/access ban, motorway) — red dashed warning ──────────
   {
-    ...line, id: "run-allowed", minzoom: 14,
-    filter: ["all", ["==", ["get", "foot_tier"], "allowed"], notArea, notTrack],
-    layout: { "line-cap": "round", "line-join": "round" },
+    ...line, id: "run-blocked",
+    filter: ["all", isBlocked, ["!", isSteps]],
+    layout: { "line-cap": "butt", "line-join": "round" },
     paint: {
-      "line-color": COLORS.runnable,
-      "line-width": ["interpolate", ["linear"], ["zoom"], 6, 0.6, 12, 1.2, 16, 2],
-      "line-opacity": 0.4,
+      "line-color": COLORS.noRun,
+      "line-width": ["interpolate", ["linear"], ["zoom"], 12, 1.4, 16, 3],
+      "line-dasharray": [2.5, 2],
+      "line-opacity": 0.9,
     },
   },
 
-  // ── Designated tier — thin bright line with a subtle white casing ─────────
+  // ── Running tracks (leisure=track) — bold orange with a white casing ──────
   {
-    ...line, id: "run-designated-casing", minzoom: 13,
-    filter: ["all", ["==", ["get", "foot_tier"], "designated"], notArea, notTrack],
+    ...line, id: "run-track-casing",
+    filter: isTrack,
     layout: { "line-cap": "round", "line-join": "round" },
     paint: {
       "line-color": "#ffffff",
-      "line-width": ["interpolate", ["linear"], ["zoom"], 6, 1.6, 12, 2.6, 16, 4],
-      "line-opacity": 0.6,
-    },
-  },
-  {
-    ...line, id: "run-designated", minzoom: 13,
-    filter: ["all", ["==", ["get", "foot_tier"], "designated"], notArea, notTrack],
-    layout: { "line-cap": "round", "line-join": "round" },
-    paint: {
-      "line-color": COLORS.runnable,
-      "line-width": ["interpolate", ["linear"], ["zoom"], 6, 0.9, 12, 1.8, 16, 3],
-      "line-opacity": 0.95,
-    },
-  },
-
-  // ── Areas (pedestrian squares etc.) — translucent fill + thin outline ─────
-  {
-    ...point, id: "run-area-fill", type: "fill", minzoom: 14,
-    filter: ["all", ["to-boolean", ["get", "is_area"]], notTrack],
-    paint: {
-      "fill-color": COLORS.area,
-      "fill-opacity": 0.22,
-    },
-  },
-  {
-    ...line, id: "run-area", minzoom: 14,
-    filter: ["all", ["to-boolean", ["get", "is_area"]], notTrack],
-    layout: { "line-cap": "round", "line-join": "round" },
-    paint: {
-      "line-color": COLORS.area,
-      "line-width": ["interpolate", ["linear"], ["zoom"], 10, 0.6, 14, 1.2, 16, 1.8],
+      "line-width": ["interpolate", ["linear"], ["zoom"], 12, 4, 16, 7],
       "line-opacity": 0.75,
     },
   },
-
-  // ── Running tracks (leisure=track) — the core, drawn bold on top ──────────
   {
-    ...line, id: "run-track-casing", minzoom: 12,
-    filter: ["to-boolean", ["get", "is_track"]],
-    layout: { "line-cap": "round", "line-join": "round" },
-    paint: {
-      "line-color": "#ffffff",
-      "line-width": ["interpolate", ["linear"], ["zoom"], 6, 2.4, 12, 4, 16, 6],
-      "line-opacity": 0.7,
-    },
-  },
-  {
-    ...line, id: "run-track", minzoom: 12,
-    filter: ["to-boolean", ["get", "is_track"]],
+    ...line, id: "run-track",
+    filter: isTrack,
     layout: { "line-cap": "round", "line-join": "round" },
     paint: {
       "line-color": COLORS.track,
-      "line-width": ["interpolate", ["linear"], ["zoom"], 6, 1.4, 12, 2.6, 16, 4],
+      "line-width": ["interpolate", ["linear"], ["zoom"], 12, 2.6, 16, 4.5],
       "line-opacity": 0.95,
     },
   },
 
-  // ── Steps overlay — wider, sparse black dashes ────────────────────────────
+  // ── Steps / stairs — dense black rungs ────────────────────────────────────
   {
     ...line, id: "run-steps",
-    minzoom: 14,
-    filter: ["to-boolean", ["get", "is_steps"]],
+    filter: ["all", isSteps, ["!", isBlocked]],
     layout: { "line-cap": "butt" },
     paint: {
-      // Dense, thick black rungs — reads clearly as stairs over the line.
       "line-color": COLORS.steps,
-      "line-width": ["interpolate", ["linear"], ["zoom"], 14, 6, 18, 13],
+      "line-width": ["interpolate", ["linear"], ["zoom"], 12, 4, 18, 13],
       "line-dasharray": [0.35, 0.45],
       "line-opacity": 1,
     },
   },
 
-  // ── Invisible wide hit-area for easy line clicking (esp. mobile) ──────────
+  // ── Invisible wide hit-area for easy line clicking ────────────────────────
   {
-    ...line, id: "run-hitbox", minzoom: 12,
+    ...line, id: "run-hitbox",
     filter: ["==", ["get", "kind"], "line"],
     paint: { "line-color": "#000000", "line-width": 16, "line-opacity": 0 },
   },
 
-  // ── Passable barriers — small grey dot, off by default ────────────────────
+  // ── Passable barriers — red dots (off by default) ─────────────────────────
   {
-    ...point, id: "barrier-passable", type: "circle", minzoom: 14,
+    ...point, id: "barrier-passable", type: "circle",
     filter: ["all", ["==", ["get", "kind"], "barrier"], ["==", ["get", "barrier_status"], "passable"]],
     paint: {
-      "circle-radius": ["interpolate", ["linear"], ["zoom"], 14, 2.5, 16, 4.5],
+      "circle-radius": ["interpolate", ["linear"], ["zoom"], 12, 2.5, 16, 4.5],
       "circle-color": COLORS.passable,
       "circle-stroke-color": "#fff",
       "circle-stroke-width": 1.2,
@@ -150,29 +104,29 @@ export const overlayLayers: LayerSpecification[] = [
 
   // ── Runner POI — single-style icon markers (icons registered in main.ts) ──
   {
-    ...point, id: "poi-water", type: "symbol", minzoom: 12,
+    ...point, id: "poi-water", type: "symbol",
     filter: ["all", ["==", ["get", "kind"], "poi"], ["==", ["get", "poi_kind"], "water"]],
     layout: poiIcon("poi-water"),
   },
   {
-    ...point, id: "poi-shelter", type: "symbol", minzoom: 12,
+    ...point, id: "poi-shelter", type: "symbol",
     filter: ["all", ["==", ["get", "kind"], "poi"], ["==", ["get", "poi_kind"], "shelter"]],
     layout: poiIcon("poi-shelter"),
   },
   {
-    ...point, id: "poi-viewpoint", type: "symbol", minzoom: 12,
+    ...point, id: "poi-viewpoint", type: "symbol",
     filter: ["all", ["==", ["get", "kind"], "poi"], ["==", ["get", "poi_kind"], "viewpoint"]],
     layout: poiIcon("poi-viewpoint"),
   },
   {
-    ...point, id: "poi-toilets", type: "symbol", minzoom: 12,
+    ...point, id: "poi-toilets", type: "symbol",
     filter: ["all", ["==", ["get", "kind"], "poi"], ["==", ["get", "poi_kind"], "toilets"]],
     layout: poiIcon("poi-toilets"),
   },
 
-  // ── Blocked barriers — red ✕ icon (drawn in main.ts), on top of everything ─
+  // ── Blocked barriers — red ✕ icon (drawn in main.ts), on top ──────────────
   {
-    ...point, id: "barrier-blocked", type: "symbol", minzoom: 13,
+    ...point, id: "barrier-blocked", type: "symbol",
     filter: ["all", ["==", ["get", "kind"], "barrier"], ["==", ["get", "barrier_status"], "blocked"]],
     layout: {
       "icon-image": "barrier-blocked-icon",

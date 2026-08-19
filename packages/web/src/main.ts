@@ -107,7 +107,8 @@ map.addControl(new maplibregl.GeolocateControl({
   positionOptions: { enableHighAccuracy: true },
   trackUserLocation: true,
 }), "top-right");
-map.addControl(new maplibregl.ScaleControl({ unit: "metric" }), "bottom-right");
+// Scale bar — bottom-centre and wider (CSS centres the bottom-left slot).
+map.addControl(new maplibregl.ScaleControl({ unit: "metric", maxWidth: 180 }), "bottom-left");
 
 // Cache the extent GeoJSON so we don't refetch on every style switch.
 let extentGeoJson: object | null = null;

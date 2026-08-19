@@ -40,26 +40,29 @@ export function makePoiIcon(kind: PoiIconKind, color: string): { imageData: Imag
       break;
     }
     case "shelter": {
-      // Roof
+      // Gazebo — a pointed roof on open posts (no walls).
       ctx.beginPath();
-      ctx.moveTo(cx - 13, cy + 1);
-      ctx.lineTo(cx, cy - 13);
-      ctx.lineTo(cx + 13, cy + 1);
+      ctx.moveTo(cx - 14, cy - 2);
+      ctx.lineTo(cx, cy - 14);
+      ctx.lineTo(cx + 14, cy - 2);
       ctx.closePath();
       ctx.fill();
-      // Posts / body
-      ctx.fillRect(cx - 9, cy + 1, 18, 11);
+      ctx.fillRect(cx - 13, cy - 2, 26, 2.5);   // roof base bar
+      ctx.fillRect(cx - 10, cy + 1, 2.5, 12);   // left post
+      ctx.fillRect(cx + 7.5, cy + 1, 2.5, 12);  // right post
       break;
     }
     case "viewpoint": {
-      // White eye almond with a hole (chip colour) as the pupil.
+      // Flower — six white petals around a chip-colour centre.
+      const pr = 6;
+      for (let i = 0; i < 6; i++) {
+        const a = (Math.PI / 3) * i;
+        ctx.beginPath();
+        ctx.arc(cx + Math.cos(a) * pr, cy + Math.sin(a) * pr, 4, 0, Math.PI * 2);
+        ctx.fill();
+      }
       ctx.beginPath();
-      ctx.moveTo(cx - 14, cy);
-      ctx.quadraticCurveTo(cx, cy - 12, cx + 14, cy);
-      ctx.quadraticCurveTo(cx, cy + 12, cx - 14, cy);
-      ctx.fill();
-      ctx.beginPath();
-      ctx.arc(cx, cy, 4.5, 0, Math.PI * 2);
+      ctx.arc(cx, cy, 3.6, 0, Math.PI * 2);
       ctx.fillStyle = color;
       ctx.fill();
       break;

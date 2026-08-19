@@ -55,6 +55,8 @@ jobs:
           VITE_PMTILES_URL: "/my_map_run/europe-run.pmtiles"
           VITE_EXTENT_URL: "/my_map_run/europe-extent.geojson"
           VITE_DATA_DATE: ${{ steps.data.outputs.tag }}
+          # Public map key (ends up in the client) — for the Landscape basemap.
+          VITE_THUNDERFOREST_KEY: ${{ vars.THUNDERFOREST_KEY }}
         run: |
           export VITE_BUILD_DATE="$(date -u +%Y-%m-%d)"
           npm run build

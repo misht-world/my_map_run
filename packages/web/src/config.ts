@@ -34,6 +34,11 @@ export const config = {
   basemapStyleUrl:
     env.VITE_BASEMAP_STYLE ?? "https://tiles.openfreemap.org/styles/bright",
 
+  /** Thunderforest API key (for the Landscape basemap). Public by nature —
+   *  it ends up in the client — injected at build time from a repo variable.
+   *  Empty → the Landscape option is hidden. */
+  thunderforestKey: env.VITE_THUNDERFOREST_KEY ?? "",
+
   /** Data snapshot date (release tag) and site build date, injected at build. */
   dataDate:  env.VITE_DATA_DATE  ?? "",
   buildDate: env.VITE_BUILD_DATE ?? "",

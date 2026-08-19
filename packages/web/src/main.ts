@@ -96,6 +96,13 @@ function resolveStyle(value: string): string | maplibregl.StyleSpecification {
       20, "© OpenStreetMap contributors · CyclOSM",
     );
   }
+  if (value === "tf-landscape") {
+    return rasterStyle(
+      "tf-landscape",
+      ["a", "b", "c"].map((s) => `https://${s}.tile.thunderforest.com/landscape/{z}/{x}/{y}.png?apikey=${config.thunderforestKey}`),
+      22, "Maps © Thunderforest · Data © OpenStreetMap contributors",
+    );
+  }
   return value;
 }
 
@@ -225,6 +232,9 @@ for (const t of toggles) t.el.addEventListener("change", applyLayerVisibility);
 const STYLE_OPTIONS: { value: string; label: string }[] = [
   { value: "https://tiles.openfreemap.org/styles/bright",   label: "Bright" },
   { value: "cyclosm",                                       label: "CyclOSM (paths)" },
+  ...(config.thunderforestKey
+    ? [{ value: "tf-landscape", label: "Landscape" }]
+    : []),
   { value: "https://tiles.openfreemap.org/styles/positron", label: "Light" },
   { value: "https://tiles.openfreemap.org/styles/liberty",  label: "Detailed" },
   { value: "satellite",                                     label: "Satellite" },

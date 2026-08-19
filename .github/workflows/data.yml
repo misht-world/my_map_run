@@ -46,13 +46,21 @@ jobs:
           swap-storage: false
 
       - name: Install system tools (osmium, tippecanoe)
-        timeout-minutes: 20
+        timeout-minutes: 15
+        env:
+          DEBIAN_FRONTEND: noninteractive
+          NEEDRESTART_MODE: a
         run: |
-          # apt on the Azure runners occasionally hangs — fail fast (step
-          # timeout) and retry instead of stalling the whole 4 h job.
-          for i in 1 2 3; do
-            sudo apt-get update && sudo apt-get install -y osmium-tool tippecanoe && break
-            echo "apt attempt $i failed; retrying in 15s…"; sleep 15
+          # apt on the Azure runners can hang for minutes — usually a hidden
+          # interactive prompt (needrestart/debconf) or a slow mirror. Force
+          # non-interactive + hard network timeouts so a bad mirror fails fast,
+          # then retry a few times instead of stalling the whole job.
+          OPTS="-o Acquire::Retries=3 -o Acquire::http::Timeout=25 -o Acquire::https::Timeout=25 -o Dpkg::Use-Pty=0"
+          for i in 1 2 3 4 5; do
+            sudo -E apt-get $OPTS update \
+              && sudo -E apt-get $OPTS install -y --no-install-recommends osmium-tool tippecanoe \
+              && break
+            echo "apt attempt $i failed; retrying in 20s…"; sleep 20
           done
           command -v tippecanoe && command -v osmium
 

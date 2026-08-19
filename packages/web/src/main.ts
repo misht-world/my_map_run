@@ -109,6 +109,12 @@ map.addControl(new maplibregl.GeolocateControl({
 }), "top-right");
 // Scale bar — bottom-centre and wider (CSS centres the bottom-left slot).
 map.addControl(new maplibregl.ScaleControl({ unit: "metric", maxWidth: 180 }), "bottom-left");
+// Move the zoom badge into the scale slot so "z14.3" sits next to the ruler.
+{
+  const slot = map.getContainer().querySelector(".maplibregl-ctrl-bottom-left");
+  const zb = document.getElementById("zoom-badge");
+  if (slot && zb) slot.insertBefore(zb, slot.firstChild);
+}
 
 // Cache the extent GeoJSON so we don't refetch on every style switch.
 let extentGeoJson: object | null = null;
@@ -208,9 +214,9 @@ for (const t of toggles) t.el.addEventListener("change", applyLayerVisibility);
 // familiar "layers" overlay control on other maps.
 // ---------------------------------------------------------------------------
 const STYLE_OPTIONS: { value: string; label: string }[] = [
+  { value: "https://tiles.openfreemap.org/styles/bright",   label: "Bright" },
   { value: "https://tiles.openfreemap.org/styles/positron", label: "Light" },
   { value: "https://tiles.openfreemap.org/styles/liberty",  label: "Detailed" },
-  { value: "https://tiles.openfreemap.org/styles/bright",   label: "Bright" },
   { value: "satellite",                                     label: "Satellite" },
 ];
 const LAYERS_ICON =

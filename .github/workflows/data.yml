@@ -46,9 +46,15 @@ jobs:
           swap-storage: false
 
       - name: Install system tools (osmium, tippecanoe)
+        timeout-minutes: 20
         run: |
-          sudo apt-get update
-          sudo apt-get install -y osmium-tool tippecanoe
+          # apt on the Azure runners occasionally hangs — fail fast (step
+          # timeout) and retry instead of stalling the whole 4 h job.
+          for i in 1 2 3; do
+            sudo apt-get update && sudo apt-get install -y osmium-tool tippecanoe && break
+            echo "apt attempt $i failed; retrying in 15s…"; sleep 15
+          done
+          command -v tippecanoe && command -v osmium
 
       - name: Install go-pmtiles CLI
         run: |

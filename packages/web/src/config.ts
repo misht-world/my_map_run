@@ -32,9 +32,9 @@ export const config = {
     "https://github.com/misht-world/my_map_run/releases/latest/download/europe-extent.geojson",
 
   /** Basemap style JSON — OpenFreeMap, free, keyless, global vector tiles.
-   *  Default: Positron (light, muted) so the bright runnable lines pop. */
+   *  Default: Bright. */
   basemapStyleUrl:
-    env.VITE_BASEMAP_STYLE ?? "https://tiles.openfreemap.org/styles/positron",
+    env.VITE_BASEMAP_STYLE ?? "https://tiles.openfreemap.org/styles/bright",
 
   /** Data snapshot date (release tag) and site build date, injected at build. */
   dataDate:  env.VITE_DATA_DATE  ?? "",

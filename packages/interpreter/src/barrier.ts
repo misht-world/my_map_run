@@ -25,6 +25,8 @@ export function interpretBarrier(tags: OsmTags): BarrierResult | null {
   // (no marker, no ✕), even if tagged foot=no / access=private. A running
   // route won't pass through a house door or a home entrance gate.
   if (tags["door"] !== undefined || tags["entrance"] !== undefined) return null;
+  // Indoor barriers (inside buildings) are not outdoor running obstacles.
+  if (tags["indoor"] === "yes") return null;
 
   const barrier = tags["barrier"];
   const foot = tags["foot"];

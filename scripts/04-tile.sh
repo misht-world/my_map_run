@@ -10,6 +10,7 @@ set -euo pipefail
 DATA_DIR="${DATA_DIR:-data}"
 IN="$DATA_DIR/europe-filtered.osm.pbf"
 GEOJSONSEQ="$DATA_DIR/europe-enriched.geojsonseq"
+PRUNED="$DATA_DIR/europe-pruned.geojsonseq"
 MBTILES="$DATA_DIR/europe-run.mbtiles"
 PMTILES="$DATA_DIR/europe-run.pmtiles"
 
@@ -22,6 +23,9 @@ echo "[tile] normalizing tags → enriched GeoJSONSeq"
 osmium export "$IN" -f geojsonseq --add-unique-id=type_id --overwrite \
   | npx tsx packages/tile-builder/src/normalize.ts \
   > "$GEOJSONSEQ"
+
+echo "[tile] pruning short dead-end spurs"
+npx tsx packages/tile-builder/src/prune-deadends.ts "$GEOJSONSEQ" "$PRUNED"
 
 echo "[tile] tippecanoe → mbtiles"
 # Layer name 'run' is referenced by the web style (packages/web/src/layers.ts).
@@ -39,11 +43,11 @@ tippecanoe \
   --maximum-zoom=12 \
   --no-tile-size-limit \
   --no-feature-limit \
-  --full-detail=14 \
+  --full-detail=16 \
   --read-parallel \
   --attribute-type=osm_id:int \
   -o "$MBTILES" \
-  "$GEOJSONSEQ"
+  "$PRUNED"
 
 echo "[tile] mbtiles → pmtiles"
 pmtiles convert --force "$MBTILES" "$PMTILES"

@@ -119,6 +119,16 @@ jobs:
       - name: Clean up raw export (save disk)
         run: rm -f data/europe-raw.geojsonseq data/europe-filtered.osm.pbf
 
+      - name: Prune short dead-end spurs
+        env:
+          DEADEND_MAX_M: ${{ vars.DEADEND_MAX_M || '30' }}
+        run: |
+          npx tsx packages/tile-builder/src/prune-deadends.ts \
+            data/europe-enriched.geojsonseq data/europe-pruned.geojsonseq
+          rm -f data/europe-enriched.geojsonseq
+          echo "Pruned GeoJSONSeq size:"; ls -lh data/europe-pruned.geojsonseq
+          echo "Line count:"; wc -l < data/europe-pruned.geojsonseq
+
       - name: Build tiles (tippecanoe + pmtiles)
         run: |
           # Keep EVERY feature — no density dropping. BOTH overflow triggers
@@ -143,18 +153,18 @@ jobs:
           # --no-feature-limit keep every feature in the densest city tiles.
           # (Per-feature tippecanoe.minzoom was removed from normalize.ts — it
           # was the bug that dropped ~99.9% of features.) Full tileset → R2.
-          # --full-detail=14: z12 tiles carry z14-level coordinate resolution
-          # (~0.4 m) so lines stay smooth when the browser overzooms, without
+          # --full-detail=16: z12 tiles carry very fine coordinate resolution
+          # (~0.1 m) so lines stay smooth when the browser overzooms, without
           # extra zoom levels. Cheap now that only z12 is stored.
           tippecanoe --force --layer=run \
             --minimum-zoom=12 --maximum-zoom=12 \
             --no-tile-size-limit --no-feature-limit \
-            --full-detail=14 \
+            --full-detail=16 \
             --read-parallel \
             --attribute-type=osm_id:int \
-            -o data/europe-run.mbtiles data/europe-enriched.geojsonseq
+            -o data/europe-run.mbtiles data/europe-pruned.geojsonseq
           pmtiles convert --force data/europe-run.mbtiles data/europe-run.pmtiles
-          rm -f data/europe-run.mbtiles data/europe-enriched.geojsonseq
+          rm -f data/europe-run.mbtiles data/europe-pruned.geojsonseq
 
       # Convert Geofabrik's europe.poly (the exact source-extract extent)
       # into a GeoJSON MultiPolygon. The web app draws it as a dashed outline

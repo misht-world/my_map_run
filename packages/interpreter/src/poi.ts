@@ -7,6 +7,10 @@ import { type OsmTags, type PoiKind } from "@mmr/model";
  * toilets. A node matching several categories takes the first.
  */
 export function interpretPoi(tags: OsmTags): PoiKind | null {
+  // Indoor POI (inside buildings, e.g. a mall drinking fountain) aren't
+  // useful for an outdoor running map.
+  if (tags["indoor"] === "yes") return null;
+
   const amenity = tags["amenity"];
   const tourism = tags["tourism"];
   const manMade = tags["man_made"];

@@ -26,6 +26,8 @@ fi
 echo "[filter] osmium tags-filter"
 osmium tags-filter --overwrite -o "$OUT" "$IN" \
   w/highway \
+  w/leisure=track \
+  r/leisure=track \
   n/barrier \
   n/access=no \
   n/access=private \

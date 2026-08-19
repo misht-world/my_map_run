@@ -321,6 +321,12 @@ map.on("mousemove", (e) => {
   cursorEl.textContent = `${e.lngLat.lat.toFixed(5)}, ${e.lngLat.lng.toFixed(5)}`;
 });
 
+// Live zoom readout so the user can reason about scale / layer thresholds.
+const zoomBadge = document.getElementById("zoom-badge") as HTMLElement;
+const updateZoomBadge = () => { zoomBadge.textContent = `z${map.getZoom().toFixed(1)}`; };
+map.on("zoom", updateZoomBadge);
+updateZoomBadge();
+
 const ctxMenu = document.getElementById("map-ctx-menu") as HTMLElement;
 let ctxLngLat: maplibregl.LngLat | null = null;
 function showCtxMenu(lngLat: maplibregl.LngLat, x: number, y: number) {

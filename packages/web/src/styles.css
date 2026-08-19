@@ -183,6 +183,25 @@ details.block > .block-body { padding-top: 6px; }
 .popup-tags td:first-child { color: var(--muted); white-space: nowrap; }
 .popup-link { display: block; margin-top: 4px; font-size: 11px; }
 
+/* ── Zoom badge (bottom-centre, above the scale bar) ────────── */
+
+.zoom-badge {
+  position: absolute;
+  bottom: 28px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 9;
+  background: rgba(255, 255, 255, 0.82);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: 2px 9px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+  pointer-events: none;
+}
+
 /* ── Scale bar — centred at the bottom, wider ───────────────── */
 
 .maplibregl-ctrl-bottom-left {

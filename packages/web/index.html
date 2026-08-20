@@ -40,6 +40,30 @@
               Drag points to adjust. Or add by place / coordinates below.
             </p>
             <select id="route-profile"></select>
+            <select id="route-mode">
+              <option value="ptp">Point A → B</option>
+              <option value="loop">Round trip (loop)</option>
+            </select>
+
+            <!-- Round-trip controls -->
+            <div id="route-loop-ctl" hidden>
+              <div class="route-loop-row">
+                <label>Distance
+                  <input id="route-loop-dist" type="number" value="5" min="1" max="60" step="0.5" /> km
+                </label>
+                <label>Direction
+                  <select id="route-loop-dir">
+                    <option value="auto">Auto</option>
+                    <option value="0">N</option><option value="45">NE</option>
+                    <option value="90">E</option><option value="135">SE</option>
+                    <option value="180">S</option><option value="225">SW</option>
+                    <option value="270">W</option><option value="315">NW</option>
+                  </select>
+                </label>
+              </div>
+              <button id="route-loop-go" type="button">Generate loop from start</button>
+            </div>
+
             <div class="route-search-row">
               <input id="route-search-input" type="text" placeholder="Place or lat, lon" />
               <button id="route-search-add" type="button">Add</button>

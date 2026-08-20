@@ -189,11 +189,25 @@ details.block > .block-body { padding-top: 6px; }
 
 /* ── Route planner ──────────────────────────────────────────── */
 
-#route-profile {
+#route-profile, #route-mode {
   width: 100%; padding: 5px 6px; margin-bottom: 5px;
   border: 1px solid var(--border); border-radius: 5px; font: inherit; font-size: 12px;
   background: #fff; cursor: pointer;
 }
+#route-loop-ctl { margin-bottom: 6px; }
+.route-loop-row { display: flex; gap: 8px; margin-bottom: 5px; }
+.route-loop-row label { flex: 1; font-size: 11px; color: var(--muted); }
+.route-loop-row input, .route-loop-row select {
+  width: 100%; padding: 4px 6px; margin-top: 2px;
+  border: 1px solid var(--border); border-radius: 5px; font: inherit; font-size: 12px; background: #fff;
+}
+#route-loop-dist { max-width: 70px; }
+#route-loop-go {
+  width: 100%; padding: 6px; border: 1px solid var(--accent); background: var(--accent);
+  color: #fff; border-radius: 5px; cursor: pointer; font: inherit; font-size: 12px; font-weight: 600;
+}
+#route-loop-go:hover { filter: brightness(1.08); }
+#route-loop-go:disabled { opacity: 0.6; cursor: default; }
 .route-search-row { display: flex; gap: 6px; }
 .route-search-row input {
   flex: 1; min-width: 0; padding: 5px 8px; border: 1px solid var(--border);

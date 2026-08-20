@@ -13,6 +13,10 @@
 
     <!-- Map context menu (right-click / long-press) -->
     <div id="map-ctx-menu" class="map-ctx-menu" hidden>
+      <button data-action="start">📍 Route: set start</button>
+      <button data-action="via">↕ Route: add via</button>
+      <button data-action="end">🏁 Route: set finish</button>
+      <hr>
       <button data-action="copy">Copy coordinates</button>
     </div>
 
@@ -27,8 +31,31 @@
 
       <div id="panel-body">
 
-        <!-- Layers -->
+        <!-- Route planner -->
         <details class="block" open>
+          <summary>Route planner</summary>
+          <div class="block-body">
+            <p class="hint" style="margin-top:0">
+              Right-click the map (long-press on mobile) → set start / via / finish.
+              Drag points to adjust. Or add by place / coordinates below.
+            </p>
+            <select id="route-profile"></select>
+            <div class="route-search-row">
+              <input id="route-search-input" type="text" placeholder="Place or lat, lon" />
+              <button id="route-search-add" type="button">Add</button>
+            </div>
+            <ul id="route-wp-list"></ul>
+            <div class="route-btns">
+              <button id="route-clear" type="button" hidden>Clear</button>
+              <button id="route-gpx"   type="button" hidden>Export GPX ↓</button>
+            </div>
+            <p id="route-status" class="route-status" hidden></p>
+            <p id="route-error"  class="error"        hidden></p>
+          </div>
+        </details>
+
+        <!-- Layers -->
+        <details class="block">
           <summary>Layers</summary>
           <div class="block-body">
             <label><input type="checkbox" id="toggle-norun"    checked /><span class="sw sw-norun"></span> Can't run (foot=no / private / motorway)</label>

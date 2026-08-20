@@ -14,6 +14,7 @@ import { makePoiIcon, makeBarrierIcon, type PoiIconKind } from "./icons.js";
 import { parseCoords } from "./search.js";
 import { parseHash, formatHash, type UrlState, type LayerState } from "./url-state.js";
 import { renderPopup } from "./popup.js";
+import { initRoutePlanner } from "./route-planner.js";
 
 // ---------------------------------------------------------------------------
 // PMTiles protocol
@@ -180,9 +181,14 @@ function addOverlay() {
       });
     }
   }
+  // Empty source for the planned route (route-casing / route-line reference it).
+  if (!map.getSource("route")) {
+    map.addSource("route", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
+  }
   for (const layer of overlayLayers) {
     if (map.getLayer(layer.id)) continue;
-    if (useGeojson) {
+    // route-* layers use the geojson "route" source, never "run" — don't strip.
+    if (useGeojson && layer.id !== "route-casing" && layer.id !== "route-line") {
       const { "source-layer": _sl, ...rest } = layer as typeof layer & { "source-layer"?: string };
       map.addLayer(rest);
     } else {
@@ -385,14 +391,20 @@ map.getCanvas().addEventListener("touchstart", (e) => {
 map.getCanvas().addEventListener("touchmove", () => window.clearTimeout(longPressTimer), { passive: true });
 map.getCanvas().addEventListener("touchend", () => window.clearTimeout(longPressTimer), { passive: true });
 
+const planner = initRoutePlanner(map);
+
 ctxMenu.addEventListener("click", async (e) => {
   const btn = (e.target as HTMLElement).closest("button[data-action]") as HTMLButtonElement | null;
   if (!btn || !ctxLngLat) return;
+  const action = btn.dataset["action"];
+  const ll = ctxLngLat;
   hideCtxMenu();
-  if (btn.dataset["action"] === "copy") {
-    const text = `${ctxLngLat.lat.toFixed(5)}, ${ctxLngLat.lng.toFixed(5)}`;
+  if (action === "copy") {
+    const text = `${ll.lat.toFixed(5)}, ${ll.lng.toFixed(5)}`;
     try { await navigator.clipboard.writeText(text); cursorEl.textContent = `Copied: ${text}`; }
     catch { /* ignore */ }
+  } else if (action === "start" || action === "via" || action === "end") {
+    planner.add(ll, action);
   }
 });
 

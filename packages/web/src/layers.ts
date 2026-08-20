@@ -136,6 +136,26 @@ export const overlayLayers: LayerSpecification[] = [
     layout: poiIcon("poi-toilets"),
   },
 
+  // ── Planned route (BRouter) — blue line with white casing, on top ─────────
+  {
+    id: "route-casing", type: "line", source: "route",
+    layout: { "line-cap": "round", "line-join": "round" },
+    paint: {
+      "line-color": "#ffffff",
+      "line-width": ["interpolate", ["linear"], ["zoom"], 10, 7, 16, 12],
+      "line-opacity": 0.9,
+    },
+  },
+  {
+    id: "route-line", type: "line", source: "route",
+    layout: { "line-cap": "round", "line-join": "round" },
+    paint: {
+      "line-color": "#1565c0",
+      "line-width": ["interpolate", ["linear"], ["zoom"], 10, 4, 16, 8],
+      "line-opacity": 0.95,
+    },
+  },
+
   // ── Blocked barriers — red ✕ icon (drawn in main.ts), on top ──────────────
   {
     ...point, id: "barrier-blocked", type: "symbol",

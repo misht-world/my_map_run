@@ -63,9 +63,13 @@ for (const t of toggles) t.el.checked = initial.layers[t.key];
 
 // Persisted basemap style (survives F5).
 const STYLE_KEY = "mmr:basemapStyle";
+const BRIGHT = "https://tiles.openfreemap.org/styles/bright";
 const savedStyle = (() => {
-  try { return localStorage.getItem(STYLE_KEY) || config.basemapStyleUrl; }
-  catch { return config.basemapStyleUrl; }
+  let s: string;
+  try { s = localStorage.getItem(STYLE_KEY) || config.basemapStyleUrl; }
+  catch { s = config.basemapStyleUrl; }
+  // Landscape needs a key — fall back to Bright if it's not available.
+  return s === "tf-landscape" && !config.thunderforestKey ? BRIGHT : s;
 })();
 
 // ---------------------------------------------------------------------------
@@ -147,6 +151,8 @@ async function loadExtent() {
 // Re-add overlay on both initial load and every setStyle() (style.load fires
 // for both; setStyle strips custom sources/layers).
 const POI_KINDS: PoiIconKind[] = ["water", "shelter", "viewpoint", "toilets"];
+// Water is blue (its defining feature); the rest keep the dark chip.
+const poiColor = (k: PoiIconKind): string => (k === "water" ? "#1e88e5" : POI_COLOR);
 
 function addOverlay() {
   // Register single-style POI icons + the blocked-barrier icon (idempotent
@@ -154,7 +160,7 @@ function addOverlay() {
   for (const k of POI_KINDS) {
     const imgId = "poi-" + k;
     if (!map.hasImage(imgId)) {
-      map.addImage(imgId, makePoiIcon(k, POI_COLOR).imageData, { pixelRatio: 2 });
+      map.addImage(imgId, makePoiIcon(k, poiColor(k)).imageData, { pixelRatio: 2 });
     }
   }
   if (!map.hasImage("barrier-blocked-icon")) {
@@ -230,11 +236,11 @@ for (const t of toggles) t.el.addEventListener("change", applyLayerVisibility);
 // familiar "layers" overlay control on other maps.
 // ---------------------------------------------------------------------------
 const STYLE_OPTIONS: { value: string; label: string }[] = [
-  { value: "https://tiles.openfreemap.org/styles/bright",   label: "Bright" },
-  { value: "cyclosm",                                       label: "CyclOSM (paths)" },
   ...(config.thunderforestKey
     ? [{ value: "tf-landscape", label: "Landscape" }]
     : []),
+  { value: "https://tiles.openfreemap.org/styles/bright",   label: "Bright" },
+  { value: "cyclosm",                                       label: "CyclOSM (paths)" },
   { value: "https://tiles.openfreemap.org/styles/positron", label: "Light" },
   { value: "https://tiles.openfreemap.org/styles/liberty",  label: "Detailed" },
   { value: "satellite",                                     label: "Satellite" },
@@ -297,11 +303,11 @@ map.addControl(makeStyleControl(), "top-right");
 // Click → popup
 // ---------------------------------------------------------------------------
 const clickLayers = [
-  "run-hitbox", "run-area-fill",
+  "run-hitbox",
   ...BARRIER_BLOCKED_IDS, ...BARRIER_PASSABLE_IDS,
   ...WATER_LAYER_IDS, ...SHELTER_LAYER_IDS, ...VIEWPOINT_LAYER_IDS, ...TOILETS_LAYER_IDS,
 ];
-const hoverLayers = clickLayers.filter((id) => id !== "run-hitbox" && id !== "run-area-fill");
+const hoverLayers = clickLayers.filter((id) => id !== "run-hitbox");
 
 map.on("click", (e) => {
   const features = map.queryRenderedFeatures(e.point, { layers: clickLayers });
@@ -447,7 +453,7 @@ if (vBuild) vBuild.textContent = config.buildDate || "dev";
 // Fill legend POI swatches with the exact same icons drawn on the map.
 document.querySelectorAll<HTMLElement>(".sw-poi[data-poi]").forEach((elm) => {
   const kind = elm.dataset["poi"] as PoiIconKind;
-  elm.style.backgroundImage = `url(${makePoiIcon(kind, POI_COLOR).dataUrl})`;
+  elm.style.backgroundImage = `url(${makePoiIcon(kind, poiColor(kind)).dataUrl})`;
 });
 
 // ---------------------------------------------------------------------------

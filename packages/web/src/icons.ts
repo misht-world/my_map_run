@@ -53,18 +53,22 @@ export function makePoiIcon(kind: PoiIconKind, color: string): { imageData: Imag
       break;
     }
     case "viewpoint": {
-      // Flower — five rounded white petals around a chip-colour centre.
-      const pr = 6.5, petal = 5;
-      for (let i = 0; i < 5; i++) {
-        const a = -Math.PI / 2 + (2 * Math.PI / 5) * i;
+      // Binoculars — two rounded white barrels with a bridge.
+      const barrel = (bx: number) => {
         ctx.beginPath();
-        ctx.arc(cx + Math.cos(a) * pr, cy + Math.sin(a) * pr, petal, 0, Math.PI * 2);
+        if (typeof ctx.roundRect === "function") ctx.roundRect(bx - 4.5, cy - 9, 9, 18, 4);
+        else ctx.rect(bx - 4.5, cy - 9, 9, 18);
         ctx.fill();
-      }
-      ctx.beginPath();
-      ctx.arc(cx, cy, 3.8, 0, Math.PI * 2);
-      ctx.fillStyle = color;
-      ctx.fill();
+        // lens hole in chip colour
+        ctx.beginPath();
+        ctx.arc(bx, cy + 4.5, 2.6, 0, Math.PI * 2);
+        ctx.fillStyle = color;
+        ctx.fill();
+        ctx.fillStyle = "#ffffff";
+      };
+      barrel(cx - 5.5);
+      barrel(cx + 5.5);
+      ctx.fillRect(cx - 5.5, cy - 7, 11, 3.4); // bridge
       break;
     }
     case "toilets": {

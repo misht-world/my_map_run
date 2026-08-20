@@ -4,7 +4,7 @@ const SOURCE = "run";
 const SOURCE_LAYER = "run";
 
 // Layer-ID groups exposed for toggle logic in main.ts.
-export const BLOCKED_LAYER_IDS    = ["run-blocked"] as const;
+export const BLOCKED_LAYER_IDS    = ["run-blocked-casing", "run-blocked"] as const;
 export const TRACK_LAYER_IDS      = ["run-track-casing", "run-track"] as const;
 export const STEPS_LAYER_IDS      = ["run-steps"] as const;
 export const BARRIER_BLOCKED_IDS  = ["barrier-blocked"] as const;
@@ -35,15 +35,27 @@ const isSteps: ExpressionSpecification = ["to-boolean", ["get", "is_steps"]];
 export const overlayLayers: LayerSpecification[] = [
 
   // ── No-run ways (foot/access ban, motorway) — red dashed warning ──────────
+  // White solid casing underneath so the red dashes stand out on busy
+  // basemaps (Landscape/CyclOSM).
+  {
+    ...line, id: "run-blocked-casing",
+    filter: ["all", isBlocked, ["!", isSteps]],
+    layout: { "line-cap": "round", "line-join": "round" },
+    paint: {
+      "line-color": "#ffffff",
+      "line-width": ["interpolate", ["linear"], ["zoom"], 12, 3.6, 16, 6.5],
+      "line-opacity": 0.85,
+    },
+  },
   {
     ...line, id: "run-blocked",
     filter: ["all", isBlocked, ["!", isSteps]],
     layout: { "line-cap": "butt", "line-join": "round" },
     paint: {
       "line-color": COLORS.noRun,
-      "line-width": ["interpolate", ["linear"], ["zoom"], 12, 1.4, 16, 3],
-      "line-dasharray": [2.5, 2],
-      "line-opacity": 0.9,
+      "line-width": ["interpolate", ["linear"], ["zoom"], 12, 1.8, 16, 3.4],
+      "line-dasharray": [2.4, 1.8],
+      "line-opacity": 1,
     },
   },
 

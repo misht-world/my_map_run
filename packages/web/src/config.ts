@@ -29,10 +29,10 @@ export const config = {
     env.VITE_EXTENT_URL ??
     "https://github.com/misht-world/my_map_run/releases/latest/download/europe-extent.geojson",
 
-  /** Basemap style JSON — OpenFreeMap, free, keyless, global vector tiles.
-   *  Default: Bright. */
+  /** Default basemap. Thunderforest Landscape (outdoors — trails/terrain) when
+   *  a key is available; main.ts falls back to Bright if the key is unset. */
   basemapStyleUrl:
-    env.VITE_BASEMAP_STYLE ?? "https://tiles.openfreemap.org/styles/bright",
+    env.VITE_BASEMAP_STYLE ?? "tf-landscape",
 
   /** Thunderforest API key (for the Landscape basemap). Public by nature —
    *  it ends up in the client — injected at build time from a repo variable.

@@ -9,22 +9,19 @@
 const BROUTER = "https://brouter.de/brouter";
 const NOMINATIM = "https://nominatim.openstreetmap.org/search";
 
-export type RunProfile = "running" | "trail" | "auto";
+export type RunProfile = "running" | "trail";
 
 // Built-in BRouter profiles (v1 approximation):
-//   running → trekking   (biases to smooth/paved ways, avoids rough & steps)
-//   trail   → hiking-beta (foot; prefers paths/trails, elevation-aware)
-//   auto    → car-fast
+//   running → trekking   (biases to smooth/paved ways; avoids steps/stairs)
+//   trail   → hiking-beta (foot; prefers paths/trails, uses steps, elevation-aware)
 const PROFILE_MAP: Record<RunProfile, string> = {
   running: "trekking",
   trail: "hiking-beta",
-  auto: "car-fast",
 };
 
 export const PROFILE_LABELS: Record<RunProfile, string> = {
-  running: "🏃 Running (even surfaces)",
+  running: "🏃 Running (even, avoids stairs)",
   trail: "⛰ Trail (hills, paths)",
-  auto: "🚗 Any (car)",
 };
 
 export interface RouteResult {

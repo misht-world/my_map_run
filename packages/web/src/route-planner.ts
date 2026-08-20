@@ -4,7 +4,7 @@ import {
   PROFILE_LABELS, type RunProfile, type RouteResult,
 } from "./routing.js";
 
-interface WayPoint { lngLat: LngLat; marker: maplibregl.Marker; }
+interface WayPoint { lngLat: LngLat; marker: maplibregl.Marker; dot: HTMLElement; }
 
 export interface RoutePlanner {
   /** Add a waypoint at a map location (from the context menu). */
@@ -27,7 +27,7 @@ export function initRoutePlanner(map: MLMap): RoutePlanner {
   const errorEl = $("route-error");
 
   // Populate the profile selector.
-  for (const key of ["running", "trail", "auto"] as RunProfile[]) {
+  for (const key of ["running", "trail"] as RunProfile[]) {
     const o = document.createElement("option");
     o.value = key; o.textContent = PROFILE_LABELS[key];
     profileSel.appendChild(o);
@@ -46,29 +46,36 @@ export function initRoutePlanner(map: MLMap): RoutePlanner {
     return "via";
   }
 
-  function makeMarkerEl(): HTMLElement {
-    const el = document.createElement("div");
-    el.className = "route-wp-dot";
-    return el;
+  // A fixed-size 24×24 shell is the marker's anchor target, so the
+  // translate(-50%,-50%) offset never changes → no drift on zoom. Only the
+  // inner dot changes size/colour per role.
+  function makeMarkerEl(): { shell: HTMLElement; dot: HTMLElement } {
+    const shell = document.createElement("div");
+    shell.className = "route-wp-shell";
+    const dot = document.createElement("div");
+    dot.className = "route-wp-dot route-wp-dot--via";
+    shell.appendChild(dot);
+    return { shell, dot };
   }
   function restyleMarkers() {
     wps.forEach((wp, i) => {
       const r = role(i);
-      wp.marker.getElement().className = `route-wp-dot route-wp-dot--${r}`;
-      wp.marker.getElement().textContent = r === "start" ? "S" : r === "end" ? "F" : "";
+      wp.dot.className = `route-wp-dot route-wp-dot--${r}`;
+      wp.dot.textContent = r === "start" ? "S" : r === "end" ? "F" : "";
     });
   }
 
   function addWp(lngLat: LngLat, index?: number) {
     if (wps.length >= MAX_WP) return;
     const at = index === undefined ? wps.length : Math.max(0, Math.min(index, wps.length));
-    const marker = new maplibregl.Marker({ element: makeMarkerEl(), draggable: true, anchor: "center" })
+    const { shell, dot } = makeMarkerEl();
+    const marker = new maplibregl.Marker({ element: shell, draggable: true, anchor: "center" })
       .setLngLat(lngLat).addTo(map);
     marker.on("dragend", () => {
       const wp = wps.find((w) => w.marker === marker);
       if (wp) { wp.lngLat = marker.getLngLat(); void rebuild(); }
     });
-    wps.splice(at, 0, { lngLat, marker });
+    wps.splice(at, 0, { lngLat, marker, dot });
     restyleMarkers();
     renderList();
     void rebuild();

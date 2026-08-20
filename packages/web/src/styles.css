@@ -227,15 +227,21 @@ details.block > .block-body { padding-top: 6px; }
 }
 .route-wp-rm:hover { border-color: #c62828; color: #c62828; }
 
+/* Fixed-size shell = the marker anchor (prevents drift on zoom). */
+.route-wp-shell {
+  width: 24px; height: 24px; display: flex; align-items: center; justify-content: center;
+  cursor: grab;
+}
+.route-wp-shell:active { cursor: grabbing; }
 .route-wp-dot {
-  width: 20px; height: 20px; border-radius: 50%; background: #e65100;
+  border-radius: 50%; background: #e65100;
   border: 2.5px solid #fff; box-shadow: 0 1px 5px rgba(0,0,0,0.5);
   display: flex; align-items: center; justify-content: center;
-  color: #fff; font-weight: 800; font-size: 10px; cursor: grab;
+  color: #fff; font-weight: 800; font-size: 10px;
+  pointer-events: none; /* shell handles drag */
 }
-.route-wp-dot:active { cursor: grabbing; }
-.route-wp-dot--start { background: #2e7d32; }
-.route-wp-dot--end   { background: #c62828; }
+.route-wp-dot--start { width: 20px; height: 20px; background: #2e7d32; }
+.route-wp-dot--end   { width: 20px; height: 20px; background: #c62828; }
 .route-wp-dot--via   { width: 13px; height: 13px; background: #e65100; border-width: 2px; }
 
 /* ── Zoom badge — bottom-left corner, separate from the scale bar ─ */

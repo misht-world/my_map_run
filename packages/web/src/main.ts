@@ -129,12 +129,6 @@ map.addControl(new maplibregl.GeolocateControl({
 }), "top-right");
 // Scale bar — bottom-centre and wider (CSS centres the bottom-left slot).
 map.addControl(new maplibregl.ScaleControl({ unit: "metric", maxWidth: 180 }), "bottom-left");
-// Move the zoom badge into the scale slot so "z14.3" sits next to the ruler.
-{
-  const slot = map.getContainer().querySelector(".maplibregl-ctrl-bottom-left");
-  const zb = document.getElementById("zoom-badge");
-  if (slot && zb) slot.insertBefore(zb, slot.firstChild);
-}
 
 // Cache the extent GeoJSON so we don't refetch on every style switch.
 let extentGeoJson: object | null = null;

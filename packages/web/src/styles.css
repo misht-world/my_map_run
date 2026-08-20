@@ -189,9 +189,12 @@ details.block > .block-body { padding-top: 6px; }
 
 /* ── Zoom badge (bottom-centre, above the scale bar) ────────── */
 
-/* Zoom badge sits inline, just left of the scale bar (moved into its slot). */
+/* Zoom badge — bottom-left corner, separate from the scale bar. */
 .zoom-badge {
-  align-self: flex-end;
+  position: absolute;
+  left: 10px;
+  bottom: 10px;
+  z-index: 9;
   background: rgba(255, 255, 255, 0.82);
   border: 1px solid var(--border);
   border-radius: 5px;
@@ -203,15 +206,12 @@ details.block > .block-body { padding-top: 6px; }
   pointer-events: none;
 }
 
-/* ── Scale bar + zoom — centred at the bottom, wider ────────── */
+/* ── Scale bar — centred at the bottom, wider ───────────────── */
 
 .maplibregl-ctrl-bottom-left {
   left: 50%;
   transform: translateX(-50%);
   bottom: 6px;
-  display: flex;
-  align-items: flex-end;
-  gap: 6px;
 }
 .maplibregl-ctrl-bottom-left .maplibregl-ctrl-scale {
   font-size: 12px;

@@ -43,6 +43,27 @@ function transform(src) {
     "else if    highway=steps then ( switch allow_steps   steps_cost                                 100000 )"
   );
 
+  // 2a) Hard access block. Mirror the app's interpretNoRun so the router never
+  //     routes where the overlay flags "can't run": foot=no/private/use_sidepath,
+  //     access=no/private/customers (no positive foot tag), or a motorway/trunk.
+  //     A positive foot permission overrides. We fold a huge penalty into
+  //     accesspenalty (which propagates into the final costfactor), matching the
+  //     profile's existing motorway=100000 "forbidden" treatment.
+  const accessLine =
+    "assign accesspenalty switch footaccess 0 switch bikeaccess 4 switch foot=use_sidepath 10 switch any_hiking_route 12 switch any_cycleroute 16 100000";
+  if (!s.includes(accessLine)) throw new Error("accesspenalty anchor not found");
+  s = s.replace(
+    accessLine,
+    "assign norun\n" +
+      "       if   foot=yes|designated|permissive                     then false\n" +
+      "       else if foot=no|private|use_sidepath                     then true\n" +
+      "       else if access=no|private|customers                      then true\n" +
+      "       else if highway=motorway|motorway_link|trunk|trunk_link  then true\n" +
+      "       else false\n" +
+      "assign accesspenalty add ( if norun then 100000 else 0 )\n" +
+      "       ( switch footaccess 0 switch bikeaccess 4 switch foot=use_sidepath 10 switch any_hiking_route 12 switch any_cycleroute 16 100000 )"
+  );
+
   // 2b) Turn cost: wire the (currently hard-zero) turncost to the header param
   //     so we can penalize sharp/zig-zag turns per profile. BRouter scales this
   //     by the turn angle, so sharper corners cost more.

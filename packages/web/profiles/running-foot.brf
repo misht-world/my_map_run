@@ -176,7 +176,14 @@ assign footaccess     or issidewalk
                       or bicycle=dismount
                       switch foot=      defaultaccess    not foot=private|no|use_sidepath
 
-assign accesspenalty switch footaccess 0 switch bikeaccess 4 switch foot=use_sidepath 10 switch any_hiking_route 12 switch any_cycleroute 16 100000
+assign norun
+       if   foot=yes|designated|permissive                     then false
+       else if foot=no|private|use_sidepath                     then true
+       else if access=no|private|customers                      then true
+       else if highway=motorway|motorway_link|trunk|trunk_link  then true
+       else false
+assign accesspenalty add ( if norun then 100000 else 0 )
+       ( switch footaccess 0 switch bikeaccess 4 switch foot=use_sidepath 10 switch any_hiking_route 12 switch any_cycleroute 16 100000 )
 
 assign badoneway = 0
 assign onewaypenalty = 0

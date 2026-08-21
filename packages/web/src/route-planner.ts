@@ -20,6 +20,19 @@ function hav(a: number[], b: number[]): number {
   const s = Math.sin(dLat / 2) ** 2 + Math.cos(a[1]! * t) * Math.cos(b[1]! * t) * Math.sin(dLon / 2) ** 2;
   return 2 * R * Math.asin(Math.sqrt(s));
 }
+/** Collapse out-and-back spurs (U-turn spikes) from a polyline of [lon,lat,ele].
+ *  A spur is where the path goes out to a dead-end tip and returns along the
+ *  same nodes; a stack-based U-turn collapse removes them (incl. nested ones). */
+function trimSpurs(coords: number[][]): number[][] {
+  const eq = (p: number[], q: number[]) => Math.abs(p[0]! - q[0]!) < 1e-6 && Math.abs(p[1]! - q[1]!) < 1e-6;
+  const st: number[][] = [];
+  for (const p of coords) {
+    if (st.length >= 2 && eq(p, st[st.length - 2]!)) st.pop(); // drop the spur tip
+    else st.push(p);
+  }
+  return st;
+}
+
 /** % of route length that retraces a segment already travelled (backtracking). */
 function backtrackPct(coords: number[][]): number {
   const key = (p: number[], q: number[]) => {
@@ -241,6 +254,23 @@ export function initRoutePlanner(map: MLMap): RoutePlanner {
         errorEl.textContent = "Couldn't build a loop here — try another direction / distance.";
         return;
       }
+      // Remove any residual out-and-back spurs, then recompute stats.
+      const origDist = best.distanceM;
+      const trimmed = trimSpurs(best.coords3d);
+      let dist = 0, asc = 0;
+      for (let i = 1; i < trimmed.length; i++) {
+        dist += hav(trimmed[i - 1]!, trimmed[i]!);
+        const de = (trimmed[i]![2] ?? 0) - (trimmed[i - 1]![2] ?? 0);
+        if (de > 0) asc += de;
+      }
+      best = {
+        geometry: { type: "LineString", coordinates: trimmed.map((c) => [c[0]!, c[1]!]) },
+        coords3d: trimmed,
+        distanceM: dist,
+        ascentM: asc,
+        durationS: origDist > 0 ? Math.round(best.durationS * (dist / origDist)) : best.durationS,
+      };
+
       result = best;
       setRoute({ type: "Feature", geometry: best.geometry, properties: {} });
       const off = Math.abs(best.distanceM - targetM) / targetM;

@@ -10,7 +10,7 @@
 
 ---context:global
 
-assign   consider_elevation     = false   # %consider_elevation% | Activate to prefer a route with few elevation meters | boolean
+assign   consider_elevation     = true   # %consider_elevation% | Activate to prefer a route with few elevation meters | boolean
 assign   consider_noise         = false   # %consider_noise% | Activate to prefer a low-noise route | boolean
 assign   consider_river         = true   # %consider_river% | Activate to prefer a route along rivers, lakes, etc. | boolean
 assign   consider_forest        = true   # %consider_forest% | Activate to prefer a route in forest or green areas| boolean
@@ -36,7 +36,7 @@ assign  SAC_K1 0.05                    # Penalizing of SAC levels below preferre
 assign  SAC_K2 0.6                     # Penalizing of SAC levels above preferred
 
 #orientation/decision penalties, not used for preferred hiking routes
-assign   turncost_value           0 # not used now
+assign   turncost_value           40 # not used now
 assign   initialcost_value        0 # not used now
 
 #less frequently changed flags
@@ -61,10 +61,10 @@ assign   turnInstructionCatchingRange  20 # V1.8.5 / default=40, but foot paths 
 
 
 # as initial point, considered flat speed 4 km/h, climbing speed 600 m /h
-assign   uphillcostvalue      7
+assign   uphillcostvalue      10
 assign   uphillcutoffvalue      3
 assign   downhillcutoffvalue  3
-assign   downhillcostvalue    7
+assign   downhillcostvalue    10
 
 #internal parameters
 assign   Offroad_hillcostfactor   multiply -0.3333 ( max -3.0 ( multiply -1.0 ( max 0.0 Offroad_factor ) ) )
@@ -153,7 +153,7 @@ assign istrack      highway=track|road|path|footway
 assign ismainroad   highway=motorway|motorway_link|trunk|trunk_link|primary|primary_link|secondary|secondary_link|tertiary|tertiary_link|unclassified
 
 #assign turncost   switch or shortest_way  is_ldhr   0 turncost_value  #v1.5
-assign turncost   0 #v1.8.3
+assign turncost   turncost_value #v1.8.3
 
 assign initialcost
    switch route=ferry 10000

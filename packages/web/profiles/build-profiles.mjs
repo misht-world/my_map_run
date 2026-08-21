@@ -43,6 +43,13 @@ function transform(src) {
     "else if    highway=steps then ( switch allow_steps   steps_cost                                 100000 )"
   );
 
+  // 2b) Turn cost: wire the (currently hard-zero) turncost to the header param
+  //     so we can penalize sharp/zig-zag turns per profile. BRouter scales this
+  //     by the turn angle, so sharper corners cost more.
+  const turnLine = "assign turncost   0 #v1.8.3";
+  if (!s.includes(turnLine)) throw new Error("turncost anchor not found");
+  s = s.replace(turnLine, "assign turncost   turncost_value #v1.8.3");
+
   // 3) Node cost: keep the access gate, add a penalty for traffic-signal /
   //    crossing nodes so routes with many light-controlled crossings cost more.
   const nodeInit = "assign initialcost switch or bikeaccess footaccess 0 1000000";
@@ -81,6 +88,10 @@ running = setParam(running, "crossing_penalty", "150"); // avoid signals/crossin
 running = setParam(running, "consider_town", "false");
 running = setParam(running, "consider_forest", "true"); // lean to parks / green areas
 running = setParam(running, "consider_river", "true"); // lean to riverside / lakeside
+running = setParam(running, "consider_elevation", "true"); // prefer flatter routes
+running = setParam(running, "uphillcostvalue", "10"); // stronger avoidance of climbs
+running = setParam(running, "downhillcostvalue", "10"); // ...and steep descents
+running = setParam(running, "turncost_value", "40"); // avoid sharp / zig-zag turns
 writeFileSync(join(here, "running-foot.brf"), running);
 
 // --- Trail: paths/hills fine, steps allowed, light crossing penalty ---

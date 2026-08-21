@@ -153,7 +153,7 @@ assign istrack      highway=track|road|path|footway
 assign ismainroad   highway=motorway|motorway_link|trunk|trunk_link|primary|primary_link|secondary|secondary_link|tertiary|tertiary_link|unclassified
 
 #assign turncost   switch or shortest_way  is_ldhr   0 turncost_value  #v1.5
-assign turncost   0 #v1.8.3
+assign turncost   turncost_value #v1.8.3
 
 assign initialcost
    switch route=ferry 10000

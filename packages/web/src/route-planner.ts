@@ -260,7 +260,18 @@ export function initRoutePlanner(map: MLMap): RoutePlanner {
       }
       // Lowest backtrack wins; distance is a tiebreaker.
       cands.sort((a, b) => (a.bt - b.bt) || (Math.abs(a.res.distanceM - targetM) - Math.abs(b.res.distanceM - targetM)));
-      const chosen = cands[0]!;
+      // For running, among the acceptably-clean candidates prefer the flattest
+      // direction (ascent per km). The ring is placed geometrically, so the
+      // per-way elevation penalty can't stop 'auto' sending the loop uphill —
+      // choosing the flattest heading here does.
+      const gradeOf = (c: { res: RouteResult }) => c.res.ascentM / Math.max(0.1, c.res.distanceM / 1000);
+      let chosen = cands[0]!;
+      if (profile === "running" && cands.length > 1) {
+        const minBt = cands[0]!.bt;
+        const clean = cands.filter((c) => c.bt <= minBt + 12);
+        clean.sort((a, b) => gradeOf(a) - gradeOf(b));
+        chosen = clean[0]!;
+      }
 
       // Phase 2 — scale that heading toward the target, keeping backtrack low.
       let best: RouteResult | null = chosen.res, bestBt = chosen.bt;

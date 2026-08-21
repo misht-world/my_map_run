@@ -12,7 +12,7 @@
 
 assign   consider_elevation     = false   # %consider_elevation% | Activate to prefer a route with few elevation meters | boolean
 assign   consider_noise         = false   # %consider_noise% | Activate to prefer a low-noise route | boolean
-assign   consider_river         = false   # %consider_river% | Activate to prefer a route along rivers, lakes, etc. | boolean
+assign   consider_river         = true   # %consider_river% | Activate to prefer a route along rivers, lakes, etc. | boolean
 assign   consider_forest        = true   # %consider_forest% | Activate to prefer a route in forest or green areas| boolean
 assign   consider_town          = false   # %consider_town% | Activate to bypass cities / big towns as far as possible | boolean
 

@@ -79,6 +79,8 @@ running = setParam(running, "SAC_scale_preferred", "0");
 running = setParam(running, "steps_cost", "8.0"); // strongly avoid stairs
 running = setParam(running, "crossing_penalty", "150"); // avoid signals/crossings
 running = setParam(running, "consider_town", "false");
+running = setParam(running, "consider_forest", "true"); // lean to parks / green areas
+running = setParam(running, "consider_river", "true"); // lean to riverside / lakeside
 writeFileSync(join(here, "running-foot.brf"), running);
 
 // --- Trail: paths/hills fine, steps allowed, light crossing penalty ---
@@ -88,6 +90,7 @@ trail = setParam(trail, "SAC_scale_preferred", "1");
 trail = setParam(trail, "steps_cost", "2.5"); // steps ok, mild preference away
 trail = setParam(trail, "crossing_penalty", "40");
 trail = setParam(trail, "consider_forest", "true"); // lean toward green areas
+trail = setParam(trail, "consider_river", "true"); // lean to riverside / lakeside
 writeFileSync(join(here, "trail-foot.brf"), trail);
 
 // The app bundles the profile text; emit it as a TS module so it lives under

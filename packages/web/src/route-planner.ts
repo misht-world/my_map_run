@@ -14,11 +14,27 @@ function destPoint(lon: number, lat: number, bearingDeg: number, distM: number):
   const λ2 = λ1 + Math.atan2(Math.sin(br) * Math.sin(d) * Math.cos(φ1), Math.cos(d) - Math.sin(φ1) * Math.sin(φ2));
   return [(λ2 * 180) / Math.PI, (φ2 * 180) / Math.PI];
 }
-function distM(a: [number, number], b: [number, number]): number {
-  const R = 6371000, toR = Math.PI / 180;
-  const dLat = (b[1] - a[1]) * toR, dLon = (b[0] - a[0]) * toR;
-  const s = Math.sin(dLat / 2) ** 2 + Math.cos(a[1] * toR) * Math.cos(b[1] * toR) * Math.sin(dLon / 2) ** 2;
+function hav(a: number[], b: number[]): number {
+  const R = 6371000, t = Math.PI / 180;
+  const dLat = (b[1]! - a[1]!) * t, dLon = (b[0]! - a[0]!) * t;
+  const s = Math.sin(dLat / 2) ** 2 + Math.cos(a[1]! * t) * Math.cos(b[1]! * t) * Math.sin(dLon / 2) ** 2;
   return 2 * R * Math.asin(Math.sqrt(s));
+}
+/** % of route length that retraces a segment already travelled (backtracking). */
+function backtrackPct(coords: number[][]): number {
+  const key = (p: number[], q: number[]) => {
+    const a = `${p[0]!.toFixed(5)},${p[1]!.toFixed(5)}`, b = `${q[0]!.toFixed(5)},${q[1]!.toFixed(5)}`;
+    return a < b ? `${a}|${b}` : `${b}|${a}`;
+  };
+  const seen = new Map<string, number>();
+  let total = 0, retraced = 0;
+  for (let i = 1; i < coords.length; i++) {
+    const L = hav(coords[i - 1]!, coords[i]!); total += L;
+    const c = (seen.get(key(coords[i - 1]!, coords[i]!)) || 0) + 1;
+    seen.set(key(coords[i - 1]!, coords[i]!), c);
+    if (c > 1) retraced += L;
+  }
+  return total > 0 ? (100 * retraced) / total : 0;
 }
 
 export interface RoutePlanner {
@@ -167,27 +183,57 @@ export function initRoutePlanner(map: MLMap): RoutePlanner {
     }
     const start: [number, number] = [wps[0]!.lngLat.lng, wps[0]!.lngLat.lat];
     const targetM = Math.max(1, Number(loopDist.value) || 5) * 1000;
-    const heading = loopDir.value === "auto" ? Math.random() * 360 : Number(loopDir.value);
     const profile = profileSel.value as RunProfile;
 
+    // One loop candidate: ring of K points around a circle that passes through
+    // the start (centre one radius away in `heading`). Returns route + backtrack%.
+    const K = 5;
+    async function build(heading: number, scale: number): Promise<{ res: RouteResult; bt: number } | null> {
+      const r = (targetM / (2 * Math.PI)) * scale;
+      const center = destPoint(start[0], start[1], heading, r);
+      const startBearingFromC = heading + 180;
+      const stepDeg = 360 / (K + 1);
+      const ring: [number, number][] = [];
+      for (let i = 1; i <= K; i++) ring.push(destPoint(center[0], center[1], startBearingFromC + i * stepDeg, r));
+      const res = await fetchRoute([start, ...ring, start], profile);
+      return res ? { res, bt: backtrackPct(res.geometry.coordinates) } : null;
+    }
+
     loopGo.disabled = true; loopGo.textContent = "Generating…";
-    statusEl.hidden = false; statusEl.textContent = "Building loop…";
+    statusEl.hidden = false; statusEl.textContent = "Finding a clean loop…";
     try {
-      let scale = 0.78, best: RouteResult | null = null, bestErr = Infinity;
-      for (let iter = 0; iter < 6; iter++) {
-        const r = (targetM / (2 * Math.PI)) * scale;
-        const center = destPoint(start[0], start[1], heading, r);
-        const tri = [0, 120, 240].map((a) => destPoint(center[0], center[1], heading + a, r));
-        // order nearest → farthest → other so the loop heads out and back
-        const sorted = tri.map((p) => ({ p, d: distM(start, p) })).sort((x, y) => x.d - y.d);
-        const ordered = [sorted[0]!.p, sorted[2]!.p, sorted[1]!.p];
-        const res = await fetchRoute([start, ...ordered, start], profile);
-        if (!res) { scale *= 1.15; continue; }
-        const err = Math.abs(res.distanceM - targetM) / targetM;
-        if (err < bestErr) { bestErr = err; best = res; }
-        if (err < 0.1) break;
-        scale *= Math.min(2, Math.max(0.5, targetM / res.distanceM));
+      // Priority: a CLEAN loop (little backtracking) over an exact distance.
+      // Phase 1 — rank several headings by backtrack at a base scale.
+      const dir = loopDir.value;
+      const headings = dir === "auto"
+        ? [0, 60, 120, 180, 240, 300].map((h) => (h + Math.random() * 30) % 360)
+        : [Number(dir) - 35, Number(dir), Number(dir) + 35];
+      const cands: { heading: number; res: RouteResult; bt: number }[] = [];
+      for (const h of headings) {
+        const c = await build(h, 0.8);
+        if (c) cands.push({ heading: h, res: c.res, bt: c.bt });
+      }
+      if (!cands.length) {
+        statusEl.hidden = true; gpxBtn.hidden = true; result = null; setRoute(null);
+        errorEl.hidden = false; errorEl.textContent = "Couldn't build a loop here — try another distance.";
+        return;
+      }
+      // Lowest backtrack wins; distance is a tiebreaker.
+      cands.sort((a, b) => (a.bt - b.bt) || (Math.abs(a.res.distanceM - targetM) - Math.abs(b.res.distanceM - targetM)));
+      const chosen = cands[0]!;
+
+      // Phase 2 — scale that heading toward the target, keeping backtrack low.
+      let best: RouteResult | null = chosen.res, bestBt = chosen.bt;
+      let scale = 0.8 * Math.min(1.6, Math.max(0.6, targetM / chosen.res.distanceM));
+      statusEl.textContent = "Tuning distance…";
+      for (let iter = 0; iter < 3; iter++) {
         scale = Math.min(2.5, Math.max(0.25, scale));
+        const c = await build(chosen.heading, scale);
+        if (!c) break;
+        // Accept only if it doesn't get noticeably more backtracky.
+        if (c.bt <= bestBt + 6) { best = c.res; bestBt = c.bt; }
+        if (Math.abs(c.res.distanceM - targetM) / targetM < 0.12) break;
+        scale *= Math.min(1.7, Math.max(0.6, targetM / c.res.distanceM));
       }
       if (!best) {
         statusEl.hidden = true; gpxBtn.hidden = true; result = null; setRoute(null);
@@ -197,8 +243,10 @@ export function initRoutePlanner(map: MLMap): RoutePlanner {
       }
       result = best;
       setRoute({ type: "Feature", geometry: best.geometry, properties: {} });
+      const off = Math.abs(best.distanceM - targetM) / targetM;
+      const note = off > 0.2 ? ` (target ${loopDist.value} km — kept the loop clean)` : "";
       statusEl.textContent =
-        `${fmtDistance(best.distanceM)} · ↑${Math.round(best.ascentM)} m · ${fmtDuration(best.durationS)}`;
+        `${fmtDistance(best.distanceM)} · ↑${Math.round(best.ascentM)} m · ${fmtDuration(best.durationS)}${note}`;
       gpxBtn.hidden = false;
       const lons = best.geometry.coordinates.map((c) => c[0]!);
       const lats = best.geometry.coordinates.map((c) => c[1]!);

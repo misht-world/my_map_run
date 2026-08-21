@@ -33,6 +33,33 @@ function trimSpurs(coords: number[][]): number[][] {
   return st;
 }
 
+/** Remove small self-crossing sub-loops (e.g. circling a junction). When the
+ *  path revisits a node and the enclosed circuit is short, splice it out. The
+ *  whole route's own start==end closure is preserved. */
+function removeSmallLoops(coords: number[][], maxLoopM: number): number[][] {
+  let c = coords;
+  for (let guard = 0; guard < 50; guard++) {
+    const seen = new Map<string, number>();
+    let spliced = false;
+    for (let i = 0; i < c.length; i++) {
+      const key = `${c[i]![0]!.toFixed(6)},${c[i]![1]!.toFixed(6)}`;
+      const j = seen.get(key);
+      if (j !== undefined && !(j === 0 && i === c.length - 1)) {
+        let len = 0;
+        for (let k = j + 1; k <= i; k++) len += hav(c[k - 1]!, c[k]!);
+        if (len <= maxLoopM) {
+          c = [...c.slice(0, j + 1), ...c.slice(i + 1)];
+          spliced = true;
+          break;
+        }
+      }
+      seen.set(key, i);
+    }
+    if (!spliced) break;
+  }
+  return c;
+}
+
 /** % of route length that retraces a segment already travelled (backtracking). */
 function backtrackPct(coords: number[][]): number {
   const key = (p: number[], q: number[]) => {
@@ -254,9 +281,9 @@ export function initRoutePlanner(map: MLMap): RoutePlanner {
         errorEl.textContent = "Couldn't build a loop here — try another direction / distance.";
         return;
       }
-      // Remove any residual out-and-back spurs, then recompute stats.
+      // Remove out-and-back spurs + small self-loops, then recompute stats.
       const origDist = best.distanceM;
-      const trimmed = trimSpurs(best.coords3d);
+      const trimmed = removeSmallLoops(trimSpurs(best.coords3d), 300);
       let dist = 0, asc = 0;
       for (let i = 1; i < trimmed.length; i++) {
         dist += hav(trimmed[i - 1]!, trimmed[i]!);

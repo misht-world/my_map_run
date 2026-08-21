@@ -1,27 +1,37 @@
 /**
- * Foot/car routing via BRouter (brouter.de) — free, keyless, elevation-aware.
+ * Foot routing via BRouter (brouter.de) — free, keyless, elevation-aware.
  *
- * v1: point-to-point (with intermediate waypoints), three profiles, GPX
- * export with elevation. Proper grade-controlled custom profiles come later
- * (v3, slope tuning); for now we map to distinct built-in BRouter profiles.
+ * Both profiles are custom *pedestrian* profiles (see profiles/*.brf), derived
+ * from Poutnik's Hiking-Mountain foot profile — they prefer footways, sidewalks
+ * and park paths over the carriageway, and:
+ *   running → avoids steps and traffic-signal / at-grade crossings, no
+ *             scrambling, leans to paved paths.
+ *   trail   → allows steps and unpaved paths / hills, leans to green areas.
+ * The profile text is uploaded to BRouter once per session (cached by id); if
+ * the upload is unavailable we fall back to a built-in foot profile.
  */
+import { RUNNING_FOOT_BRF, TRAIL_FOOT_BRF } from "./profiles.generated.js";
 
 const BROUTER = "https://brouter.de/brouter";
+const BROUTER_UPLOAD = "https://brouter.de/brouter/profile";
 const NOMINATIM = "https://nominatim.openstreetmap.org/search";
 
 export type RunProfile = "running" | "trail";
 
-// Built-in BRouter profiles (v1 approximation):
-//   running → trekking   (biases to smooth/paved ways; avoids steps/stairs)
-//   trail   → hiking-beta (foot; prefers paths/trails, uses steps, elevation-aware)
-const PROFILE_MAP: Record<RunProfile, string> = {
-  running: "trekking",
+const PROFILE_BRF: Record<RunProfile, string> = {
+  running: RUNNING_FOOT_BRF,
+  trail: TRAIL_FOOT_BRF,
+};
+// If the custom-profile upload is blocked (CORS/offline), fall back to a
+// built-in *foot* profile — still path/sidewalk-preferring, unlike trekking.
+const PROFILE_FALLBACK: Record<RunProfile, string> = {
+  running: "hiking-beta",
   trail: "hiking-beta",
 };
 
 export const PROFILE_LABELS: Record<RunProfile, string> = {
-  running: "🏃 Running (even, avoids stairs)",
-  trail: "⛰ Trail (hills, paths)",
+  running: "🏃 Running (sidewalks/paths, avoids stairs & lights)",
+  trail: "⛰ Trail (paths, hills, steps ok)",
 };
 
 export interface RouteResult {
@@ -34,14 +44,35 @@ export interface RouteResult {
   durationS: number;
 }
 
-/** Route through the given [lon, lat] waypoints with a profile, or null. */
-export async function fetchRoute(
-  waypoints: [number, number][],
-  profile: RunProfile,
-): Promise<RouteResult | null> {
-  if (waypoints.length < 2) return null;
-  const lonlats = waypoints.map(([lon, lat]) => `${lon.toFixed(6)},${lat.toFixed(6)}`).join("|");
-  const url = `${BROUTER}?lonlats=${lonlats}&profile=${PROFILE_MAP[profile]}&alternativeidx=0&format=geojson`;
+// Session cache of uploaded custom-profile ids, plus a "don't retry" flag.
+const uploadedIds: Partial<Record<RunProfile, string>> = {};
+const uploadFailed: Partial<Record<RunProfile, boolean>> = {};
+
+/** Upload the custom profile (once per session) and return its BRouter id. */
+async function uploadProfile(profile: RunProfile): Promise<string | null> {
+  if (uploadedIds[profile]) return uploadedIds[profile]!;
+  if (uploadFailed[profile]) return null;
+  try {
+    const r = await fetch(BROUTER_UPLOAD, {
+      method: "POST",
+      headers: { "Content-Type": "text/plain" },
+      body: PROFILE_BRF[profile],
+      signal: AbortSignal.timeout(12000),
+    });
+    if (!r.ok) throw new Error(String(r.status));
+    const j = (await r.json()) as { profileid?: string };
+    if (!j.profileid) throw new Error("no id");
+    uploadedIds[profile] = j.profileid;
+    return j.profileid;
+  } catch {
+    uploadFailed[profile] = true; // fall back for the rest of the session
+    return null;
+  }
+}
+
+/** Single BRouter route request for a resolved profile id/name. */
+async function routeOnce(lonlats: string, brouterProfile: string): Promise<RouteResult | null> {
+  const url = `${BROUTER}?lonlats=${lonlats}&profile=${brouterProfile}&alternativeidx=0&format=geojson`;
   let resp: Response;
   try {
     resp = await fetch(url, { signal: AbortSignal.timeout(25000) });
@@ -61,6 +92,30 @@ export async function fetchRoute(
     ascentM: Number(p["filtered ascend"]) || 0,
     durationS: Number(p["total-time"]) || 0,
   };
+}
+
+/** Route through the given [lon, lat] waypoints with a profile, or null. */
+export async function fetchRoute(
+  waypoints: [number, number][],
+  profile: RunProfile,
+): Promise<RouteResult | null> {
+  if (waypoints.length < 2) return null;
+  const lonlats = waypoints.map(([lon, lat]) => `${lon.toFixed(6)},${lat.toFixed(6)}`).join("|");
+
+  const customId = await uploadProfile(profile);
+  if (customId) {
+    const r = await routeOnce(lonlats, customId);
+    if (r) return r;
+    // The server may have evicted the uploaded profile — re-upload once.
+    delete uploadedIds[profile];
+    const id2 = await uploadProfile(profile);
+    if (id2) {
+      const r2 = await routeOnce(lonlats, id2);
+      if (r2) return r2;
+    }
+  }
+  // Last resort: built-in foot profile.
+  return routeOnce(lonlats, PROFILE_FALLBACK[profile]);
 }
 
 /** Geocode free text (or "lat, lon") → [lon, lat] or null. */

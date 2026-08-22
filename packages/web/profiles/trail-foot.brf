@@ -42,7 +42,8 @@ assign   initialcost_value        0 # not used now
 #less frequently changed flags
 assign   allow_steps              true   # %allow_steps% | Set to false to disallow steps | boolean
 assign   steps_cost               2.5    # %steps_cost% | Cost multiplier for steps when allowed (higher = avoid stairs more) | number
-assign   crossing_penalty         40    # %crossing_penalty% | Extra cost (approx. meters) added per traffic-signal node; at-grade crossings get a fraction | number
+assign   crossing_penalty         40    # %crossing_penalty% | Extra cost (approx. meters) added per traffic-signal crossing node | number
+assign   path_extra               0.0    # %path_extra% | Extra cost on highway=path, to prefer footway over path | number
 assign   allow_ferries            true   # %allow_ferries% | set to false to disallow ferries | boolean
 
 assign   use_proposed_cycleroutes false  # %use_proposed_cycleroutes% | Set to true to consider proposed and regular cycleroutes as equals | boolean
@@ -309,7 +310,7 @@ assign rawcostfactor # can be <1.0, is treated later
   else if    highway=service         then  ( switch ismuddy 1.5     switch iswet   1.1 1.2 )
 
   else if    istrack                 then
-       ( add 1.0 add tracktype_penalty add surface_penalty      add wet_penalty        SAC_scale_penalty      )
+       ( add ( if highway=path then ( add 1.0 path_extra ) else 1.0 ) add tracktype_penalty add surface_penalty      add wet_penalty        SAC_scale_penalty      )
 
   else if highway=motorway|motorway_link  then  100000
   else if highway=proposed|abandoned|construction then (  switch ismuddy 10  switch iswet 6 4 )
@@ -482,11 +483,12 @@ assign footaccess
                         1
 
 assign accessblock switch or bikeaccess footaccess 0 1000000
+# Only signal-controlled crossings cost extra (waiting at lights). Marked /
+# zebra / uncontrolled crossings are free so the router crosses AT them
+# rather than detouring to jaywalk mid-road.
 assign crossingcost
-       if highway=traffic_signals            then crossing_penalty
-       else if crossing=traffic_signals      then crossing_penalty
-       else if highway=crossing              then ( multiply crossing_penalty 0.35 )
-       else if crossing=uncontrolled|marked|zebra then ( multiply crossing_penalty 0.25 )
+       if highway=traffic_signals       then crossing_penalty
+       else if crossing=traffic_signals then crossing_penalty
        else 0
 assign initialcost add accessblock crossingcost
 

@@ -30,7 +30,8 @@ function transform(src) {
     allowStepsLine +
       "\n" +
       "assign   steps_cost               6.0    # %steps_cost% | Cost multiplier for steps when allowed (higher = avoid stairs more) | number\n" +
-      "assign   crossing_penalty         120    # %crossing_penalty% | Extra cost (approx. meters) added per traffic-signal node; at-grade crossings get a fraction | number"
+      "assign   crossing_penalty         120    # %crossing_penalty% | Extra cost (approx. meters) added per traffic-signal crossing node | number\n" +
+      "assign   path_extra               0.0    # %path_extra% | Extra cost on highway=path, to prefer footway over path | number"
   );
 
   // 2) Steps: finite, tunable penalty instead of the hard 1.0/3.0 choice, so
@@ -71,6 +72,17 @@ function transform(src) {
   if (!s.includes(turnLine)) throw new Error("turncost anchor not found");
   s = s.replace(turnLine, "assign turncost   turncost_value #v1.8.3");
 
+  // 2d) Prefer footway over path: add path_extra to highway=path only. (The
+  //     final costfactor floors at 1.0, so we penalize path rather than
+  //     discount footway, which would be clamped away.)
+  const istrackCost =
+    "( add 1.0 add tracktype_penalty add surface_penalty      add wet_penalty        SAC_scale_penalty      )";
+  if (!s.includes(istrackCost)) throw new Error("istrack costfactor anchor not found");
+  s = s.replace(
+    istrackCost,
+    "( add ( if highway=path then ( add 1.0 path_extra ) else 1.0 ) add tracktype_penalty add surface_penalty      add wet_penalty        SAC_scale_penalty      )"
+  );
+
   // 3) Node cost: keep the access gate, add a penalty for traffic-signal /
   //    crossing nodes so routes with many light-controlled crossings cost more.
   const nodeInit = "assign initialcost switch or bikeaccess footaccess 0 1000000";
@@ -78,11 +90,12 @@ function transform(src) {
   s = s.replace(
     nodeInit,
     "assign accessblock switch or bikeaccess footaccess 0 1000000\n" +
+      "# Only signal-controlled crossings cost extra (waiting at lights). Marked /\n" +
+      "# zebra / uncontrolled crossings are free so the router crosses AT them\n" +
+      "# rather than detouring to jaywalk mid-road.\n" +
       "assign crossingcost\n" +
-      "       if highway=traffic_signals            then crossing_penalty\n" +
-      "       else if crossing=traffic_signals      then crossing_penalty\n" +
-      "       else if highway=crossing              then ( multiply crossing_penalty 0.35 )\n" +
-      "       else if crossing=uncontrolled|marked|zebra then ( multiply crossing_penalty 0.25 )\n" +
+      "       if highway=traffic_signals       then crossing_penalty\n" +
+      "       else if crossing=traffic_signals then crossing_penalty\n" +
       "       else 0\n" +
       "assign initialcost add accessblock crossingcost"
   );
@@ -105,7 +118,8 @@ let running = common;
 running = setParam(running, "SAC_scale_limit", "1"); // no mountain scrambling
 running = setParam(running, "SAC_scale_preferred", "0");
 running = setParam(running, "steps_cost", "8.0"); // strongly avoid stairs
-running = setParam(running, "crossing_penalty", "150"); // avoid signals/crossings
+running = setParam(running, "crossing_penalty", "60"); // mild dislike of traffic lights (not so high it jaywalks)
+running = setParam(running, "path_extra", "0.7"); // prefer footway over path (noticeable, not a ban)
 running = setParam(running, "consider_town", "false");
 running = setParam(running, "consider_forest", "true"); // lean to parks / green areas
 running = setParam(running, "consider_river", "true"); // lean to riverside / lakeside

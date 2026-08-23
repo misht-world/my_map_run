@@ -19,7 +19,7 @@ assign   consider_town          = false   # %consider_town% | Activate to bypass
 assign   shortest_way             0    # 0 as default, duplicate shortest standard profile, SAC access limit ignored for now
 
 assign   iswet                    0    # %iswet% | tries to prevent muddy boots and wet buttocks | boolean
-assign   hiking_routes_preference 0.20 # %hiking_routes_preference% | Increases cost of non hiking routes by multiplier 1 + hiking_routes_preference (0.10 to 2.0) | number
+assign   hiking_routes_preference 0.5 # %hiking_routes_preference% | Increases cost of non hiking routes by multiplier 1 + hiking_routes_preference (0.10 to 2.0) | number
 
 assign   Offroad_factor           0.0  # default 0.0, see ****), see also https://github.com/poutnikl/Brouter-profiles/wiki/Trekking-MTB-Profiles---legend
 

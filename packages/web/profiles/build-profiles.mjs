@@ -127,6 +127,7 @@ running = setParam(running, "consider_elevation", "true"); // prefer flatter rou
 running = setParam(running, "uphillcostvalue", "10"); // stronger avoidance of climbs
 running = setParam(running, "downhillcostvalue", "10"); // ...and steep descents
 running = setParam(running, "turncost_value", "40"); // avoid sharp / zig-zag turns
+running = setParam(running, "hiking_routes_preference", "1.2"); // follow recognized foot/walking-network corridors
 writeFileSync(join(here, "running-foot.brf"), running);
 
 // --- Trail: paths/hills fine, steps allowed, light crossing penalty ---
@@ -137,6 +138,7 @@ trail = setParam(trail, "steps_cost", "2.5"); // steps ok, mild preference away
 trail = setParam(trail, "crossing_penalty", "40");
 trail = setParam(trail, "consider_forest", "true"); // lean toward green areas
 trail = setParam(trail, "consider_river", "true"); // lean to riverside / lakeside
+trail = setParam(trail, "hiking_routes_preference", "0.5"); // mild pull to marked trail networks
 writeFileSync(join(here, "trail-foot.brf"), trail);
 
 // The app bundles the profile text; emit it as a TS module so it lives under

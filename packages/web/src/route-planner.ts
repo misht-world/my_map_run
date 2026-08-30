@@ -5,6 +5,8 @@ import {
 } from "./routing.js";
 import { autoFitShape, SHAPE_LABELS, type ShapeName } from "./shape-art.js";
 import { fetchPedNetwork, type Bbox } from "./pednet.js";
+import { fetchLoopData } from "./loop-data.js";
+import { LOOP_SHAPES, loopWaypoints, normPerimeter, type LoopShape } from "./loop-gen.js";
 
 interface WayPoint { lngLat: LngLat; marker: maplibregl.Marker; dot: HTMLElement; }
 
@@ -77,6 +79,21 @@ function backtrackPct(coords: number[][]): number {
     if (c > 1) retraced += L;
   }
   return total > 0 ? (100 * retraced) / total : 0;
+}
+
+/** Run `fn` over `items` with limited concurrency, calling `onEach` per finish. */
+async function mapPool<T, R>(items: T[], n: number, fn: (t: T) => Promise<R>, onEach: () => void): Promise<R[]> {
+  const results: R[] = new Array(items.length);
+  let i = 0;
+  const worker = async () => {
+    while (i < items.length) {
+      const idx = i++;
+      results[idx] = await fn(items[idx]!);
+      onEach();
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(n, items.length) }, worker));
+  return results;
 }
 
 export interface RoutePlanner {
@@ -236,6 +253,11 @@ export function initRoutePlanner(map: MLMap): RoutePlanner {
   }
 
   // ── Round-trip (loop) generation ────────────────────────────────────────
+  interface LoopCand {
+    res: RouteResult; shape: LoopShape; heading: number; size: number;
+    dist: number; asc: number; bt: number; steps: number; park: number;
+  }
+
   async function generateLoop() {
     errorEl.hidden = true;
     if (wps.length < 1) {
@@ -247,99 +269,91 @@ export function initRoutePlanner(map: MLMap): RoutePlanner {
     const targetM = Math.max(1, Number(loopDist.value) || 5) * 1000;
     const profile = profileSel.value as RunProfile;
 
-    // One loop candidate: ring of K points around a circle that passes through
-    // the start (centre one radius away in `heading`). Returns route + backtrack%.
-    const K = 5;
-    async function build(heading: number, scale: number): Promise<{ res: RouteResult; bt: number } | null> {
-      const r = (targetM / (2 * Math.PI)) * scale;
-      const center = destPoint(start[0], start[1], heading, r);
-      const startBearingFromC = heading + 180;
-      const stepDeg = 360 / (K + 1);
-      const ring: [number, number][] = [];
-      for (let i = 1; i <= K; i++) ring.push(destPoint(center[0], center[1], startBearingFromC + i * stepDeg, r));
-      const res = await fetchRoute([start, ...ring, start], profile);
-      return res ? { res, bt: backtrackPct(res.geometry.coordinates) } : null;
-    }
-
     loopGo.disabled = true; loopGo.textContent = "Generating…";
-    statusEl.hidden = false; statusEl.textContent = "Finding a clean loop…";
+    statusEl.hidden = false; statusEl.textContent = "Analyzing area…";
     try {
-      // Priority: a CLEAN loop (little backtracking) over an exact distance.
-      // Phase 1 — rank several headings by backtrack at a base scale.
+      // Local steps + parks for scoring (best effort; falls back to distance +
+      // backtrack scoring if Overpass is unavailable).
+      const rM = Math.min(6000, Math.max(1500, targetM / 4));
+      const dLat = rM / 111320, dLon = rM / (111320 * Math.cos((start[1] * Math.PI) / 180));
+      const bbox: Bbox = { s: start[1] - dLat, w: start[0] - dLon, n: start[1] + dLat, e: start[0] + dLon };
+      const data = await fetchLoopData(bbox).catch(() => null);
+
+      // Evaluate one loop: route the shape's waypoints, clean spurs, measure.
+      const evalC = async (shape: LoopShape, heading: number, size: number): Promise<LoopCand | null> => {
+        const wp = loopWaypoints(start, LOOP_SHAPES[shape], size, heading);
+        const res = await fetchRoute(wp, profile);
+        if (!res || res.coords3d.length < 4) return null;
+        const trimmed = removeSmallLoops(trimSpurs(res.coords3d), 300);
+        let dist = 0, asc = 0;
+        for (let i = 1; i < trimmed.length; i++) {
+          dist += hav(trimmed[i - 1]!, trimmed[i]!);
+          const de = (trimmed[i]![2] ?? 0) - (trimmed[i - 1]![2] ?? 0);
+          if (de > 0) asc += de;
+        }
+        const coords2d = trimmed.map((c) => [c[0]!, c[1]!]);
+        const cleaned: RouteResult = {
+          geometry: { type: "LineString", coordinates: coords2d },
+          coords3d: trimmed, distanceM: dist, ascentM: asc,
+          durationS: res.distanceM > 0 ? Math.round(res.durationS * (dist / res.distanceM)) : res.durationS,
+        };
+        return {
+          res: cleaned, shape, heading, size, dist, asc, bt: backtrackPct(coords2d),
+          steps: data ? data.stepHits(coords2d) : 0, park: data ? data.parkFraction(coords2d) : 0,
+        };
+      };
+
+      // Score (lower is better). Running: flatness + stair-avoidance lead, park
+      // is a bonus (doesn't override gradients), backtrack keeps it clean, and a
+      // distance term nudges to the target. Trail: hills/steps fine.
+      const score = (c: LoopCand): number => {
+        const gradePerKm = c.asc / Math.max(0.1, c.dist / 1000);
+        const distPen = 100 * (Math.abs(c.dist - targetM) / targetM);
+        if (profile === "running") return c.bt + gradePerKm + c.steps * 0.7 - c.park * 30 + distPen;
+        return c.bt * 1.2 - c.park * 20 + distPen;
+      };
+
       const dir = loopDir.value;
       const headings = dir === "auto"
-        ? [0, 60, 120, 180, 240, 300].map((h) => (h + Math.random() * 30) % 360)
-        : [Number(dir) - 35, Number(dir), Number(dir) + 35];
-      const cands: { heading: number; res: RouteResult; bt: number }[] = [];
-      for (const h of headings) {
-        const c = await build(h, 0.8);
-        if (c) cands.push({ heading: h, res: c.res, bt: c.bt });
-      }
+        ? [0, 60, 120, 180, 240, 300].map((h) => (h + Math.random() * 25) % 360)
+        : [Number(dir) - 30, Number(dir), Number(dir) + 30];
+      const shapes: LoopShape[] = ["circle", "oval", "teardrop"];
+      const sizeFor = (shape: LoopShape) => targetM / (1.3 * normPerimeter(LOOP_SHAPES[shape]));
+
+      const jobs: { shape: LoopShape; h: number }[] = [];
+      for (const shape of shapes) for (const h of headings) jobs.push({ shape, h });
+      const total = jobs.length + 1;
+      let done = 0;
+      const results = await mapPool(jobs, 4, (j) => evalC(j.shape, j.h, sizeFor(j.shape)), () => {
+        statusEl.textContent = `Trying loops… ${Math.round((100 * ++done) / total)}%`;
+      });
+      const cands: LoopCand[] = results.filter((c): c is LoopCand => c !== null);
       if (!cands.length) {
         statusEl.hidden = true; gpxBtn.hidden = true; result = null; setRoute(null);
         errorEl.hidden = false; errorEl.textContent = "Couldn't build a loop here — try another distance.";
         return;
       }
-      // Lowest backtrack wins; distance is a tiebreaker.
-      cands.sort((a, b) => (a.bt - b.bt) || (Math.abs(a.res.distanceM - targetM) - Math.abs(b.res.distanceM - targetM)));
-      // For running, among the acceptably-clean candidates prefer the flattest
-      // direction (ascent per km). The ring is placed geometrically, so the
-      // per-way elevation penalty can't stop 'auto' sending the loop uphill —
-      // choosing the flattest heading here does.
-      const gradeOf = (c: { res: RouteResult }) => c.res.ascentM / Math.max(0.1, c.res.distanceM / 1000);
-      let chosen = cands[0]!;
-      if (profile === "running" && cands.length > 1) {
-        const minBt = cands[0]!.bt;
-        const clean = cands.filter((c) => c.bt <= minBt + 12);
-        clean.sort((a, b) => gradeOf(a) - gradeOf(b));
-        chosen = clean[0]!;
+
+      cands.sort((a, b) => score(a) - score(b));
+      let best = cands[0]!;
+
+      // Distance refinement: re-route the winning shape/heading scaled to target.
+      const scaleFix = Math.min(1.6, Math.max(0.6, targetM / Math.max(1, best.dist)));
+      if (Math.abs(scaleFix - 1) > 0.08) {
+        statusEl.textContent = "Tuning distance…";
+        const c = await evalC(best.shape, best.heading, best.size * scaleFix);
+        if (c && score(c) < score(best)) best = c;
       }
 
-      // Phase 2 — scale that heading toward the target, keeping backtrack low.
-      let best: RouteResult | null = chosen.res, bestBt = chosen.bt;
-      let scale = 0.8 * Math.min(1.6, Math.max(0.6, targetM / chosen.res.distanceM));
-      statusEl.textContent = "Tuning distance…";
-      for (let iter = 0; iter < 3; iter++) {
-        scale = Math.min(2.5, Math.max(0.25, scale));
-        const c = await build(chosen.heading, scale);
-        if (!c) break;
-        // Accept only if it doesn't get noticeably more backtracky.
-        if (c.bt <= bestBt + 6) { best = c.res; bestBt = c.bt; }
-        if (Math.abs(c.res.distanceM - targetM) / targetM < 0.12) break;
-        scale *= Math.min(1.7, Math.max(0.6, targetM / c.res.distanceM));
-      }
-      if (!best) {
-        statusEl.hidden = true; gpxBtn.hidden = true; result = null; setRoute(null);
-        errorEl.hidden = false;
-        errorEl.textContent = "Couldn't build a loop here — try another direction / distance.";
-        return;
-      }
-      // Remove out-and-back spurs + small self-loops, then recompute stats.
-      const origDist = best.distanceM;
-      const trimmed = removeSmallLoops(trimSpurs(best.coords3d), 300);
-      let dist = 0, asc = 0;
-      for (let i = 1; i < trimmed.length; i++) {
-        dist += hav(trimmed[i - 1]!, trimmed[i]!);
-        const de = (trimmed[i]![2] ?? 0) - (trimmed[i - 1]![2] ?? 0);
-        if (de > 0) asc += de;
-      }
-      best = {
-        geometry: { type: "LineString", coordinates: trimmed.map((c) => [c[0]!, c[1]!]) },
-        coords3d: trimmed,
-        distanceM: dist,
-        ascentM: asc,
-        durationS: origDist > 0 ? Math.round(best.durationS * (dist / origDist)) : best.durationS,
-      };
-
-      result = best;
-      setRoute({ type: "Feature", geometry: best.geometry, properties: {} });
-      const off = Math.abs(best.distanceM - targetM) / targetM;
-      const note = off > 0.2 ? ` (target ${loopDist.value} km — kept the loop clean)` : "";
-      statusEl.textContent =
-        `${fmtDistance(best.distanceM)} · ↑${Math.round(best.ascentM)} m · ${fmtDuration(best.durationS)}${note}`;
+      result = best.res;
+      setRoute({ type: "Feature", geometry: best.res.geometry, properties: {} });
+      const bits = [fmtDistance(best.dist), `↑${Math.round(best.asc)} m`, fmtDuration(best.res.durationS)];
+      if (data && profile === "running") bits.push(best.steps === 0 ? "step-free" : `~${best.steps} step pts`);
+      if (data && best.park > 0.05) bits.push(`${Math.round(best.park * 100)}% park`);
+      statusEl.textContent = bits.join(" · ");
       gpxBtn.hidden = false;
-      const lons = best.geometry.coordinates.map((c) => c[0]!);
-      const lats = best.geometry.coordinates.map((c) => c[1]!);
+      const lons = best.res.geometry.coordinates.map((c) => c[0]!);
+      const lats = best.res.geometry.coordinates.map((c) => c[1]!);
       map.fitBounds([[Math.min(...lons), Math.min(...lats)], [Math.max(...lons), Math.max(...lats)]],
         { padding: 60, maxZoom: 15 });
     } finally {

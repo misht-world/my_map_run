@@ -43,6 +43,7 @@
             <select id="route-mode">
               <option value="ptp">Point A → B</option>
               <option value="loop" selected>Round trip (loop)</option>
+              <option value="shape">Shape run (auto-fit) ✨</option>
             </select>
 
             <!-- Round-trip controls -->
@@ -62,6 +63,30 @@
                 </label>
               </div>
               <button id="route-loop-go" type="button">Generate loop from start</button>
+            </div>
+
+            <!-- Shape-run (GPS art) controls -->
+            <div id="route-shape-ctl" hidden>
+              <p class="hint" style="margin-top:0">
+                Set a start, pick a shape and distance, then auto-fit: we search
+                placements and pick the one that best traces the shape on real
+                running paths. Works best in dense / grid areas.
+              </p>
+              <div class="route-loop-row">
+                <label>Shape
+                  <select id="route-shape-name"></select>
+                </label>
+                <label>Distance
+                  <input id="route-shape-dist" type="number" value="5" min="1" max="42" step="0.5" /> km
+                </label>
+              </div>
+              <label class="shape-upright">
+                <input type="checkbox" id="route-shape-upright" checked /> Keep upright
+              </label>
+              <button id="route-shape-go" type="button">Auto-fit shape from start</button>
+              <div id="route-shape-progress" class="shape-progress" hidden>
+                <div id="route-shape-bar"></div>
+              </div>
             </div>
 
             <div class="route-search-row">

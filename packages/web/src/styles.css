@@ -208,6 +208,16 @@ details.block > .block-body { padding-top: 6px; }
 }
 #route-loop-go:hover { filter: brightness(1.08); }
 #route-loop-go:disabled { opacity: 0.6; cursor: default; }
+#route-shape-dist { max-width: 70px; }
+.shape-upright { display: block; font-size: 11px; color: var(--muted); margin: 2px 0 6px; }
+#route-shape-go {
+  width: 100%; padding: 6px; border: 1px solid var(--accent); background: var(--accent);
+  color: #fff; border-radius: 5px; cursor: pointer; font: inherit; font-size: 12px; font-weight: 600;
+}
+#route-shape-go:hover { filter: brightness(1.08); }
+#route-shape-go:disabled { opacity: 0.6; cursor: default; }
+.shape-progress { height: 5px; margin-top: 6px; border-radius: 3px; background: var(--border); overflow: hidden; }
+#route-shape-bar { height: 100%; width: 0; background: var(--accent); transition: width 0.2s ease; }
 .route-search-row { display: flex; gap: 6px; }
 .route-search-row input {
   flex: 1; min-width: 0; padding: 5px 8px; border: 1px solid var(--border);

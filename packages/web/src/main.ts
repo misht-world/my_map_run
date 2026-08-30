@@ -185,6 +185,10 @@ function addOverlay() {
   if (!map.getSource("route")) {
     map.addSource("route", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
   }
+  // Empty source for the shape-run ideal outline (shape-ideal-line references it).
+  if (!map.getSource("shape-ideal")) {
+    map.addSource("shape-ideal", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
+  }
   for (const layer of overlayLayers) {
     if (map.getLayer(layer.id)) continue;
     // route-* layers use the geojson "route" source, never "run" — don't strip.

@@ -281,7 +281,11 @@ export function initRoutePlanner(map: MLMap): RoutePlanner {
 
       // Evaluate one loop: route the shape's waypoints, clean spurs, measure.
       const evalC = async (shape: LoopShape, heading: number, size: number): Promise<LoopCand | null> => {
-        const wp = loopWaypoints(start, LOOP_SHAPES[shape], size, heading);
+        const raw = loopWaypoints(start, LOOP_SHAPES[shape], size, heading);
+        // Snap intermediate waypoints onto the network so the route doesn't
+        // detour to reach an off-path point; keep the start (index 0 / last) exact.
+        const wp: [number, number][] = raw.map((p, i) =>
+          data && i > 0 && i < raw.length - 1 ? data.snap(p[0], p[1]) : p);
         const res = await fetchRoute(wp, profile);
         if (!res || res.coords3d.length < 4) return null;
         const trimmed = removeSmallLoops(trimSpurs(res.coords3d), 300);

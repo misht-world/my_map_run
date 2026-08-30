@@ -16,12 +16,14 @@ const circle = (n: number, sx = 1): [number, number][] => {
   return pts;
 };
 
+// Fewer waypoints → BRouter has room to follow real paths in straight lines
+// (too many forced points make it detour to reach each one).
 export const LOOP_SHAPES: Record<LoopShape, [number, number][]> = {
-  circle: circle(12),
-  oval: circle(12, 1.7),
+  circle: circle(8),
+  oval: circle(8, 1.7),
   teardrop: [
-    [0, -1.3], [-0.7, -0.4], [-1, 0.3], [-0.7, 0.9], [0, 1.1],
-    [0.7, 0.9], [1, 0.3], [0.7, -0.4], [0, -1.3],
+    [0, -1.3], [-0.75, -0.3], [-0.85, 0.55], [0, 1.05],
+    [0.85, 0.55], [0.75, -0.3], [0, -1.3],
   ],
 };
 

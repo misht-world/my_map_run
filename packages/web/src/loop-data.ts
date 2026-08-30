@@ -39,8 +39,26 @@ function pointInRing(lon: number, lat: number, r: Ring): boolean {
   return inside;
 }
 
+const RUNNABLE =
+  "footway|path|pedestrian|steps|track|cycleway|living_street|residential|service|unclassified|tertiary|tertiary_link|secondary|secondary_link|primary|primary_link|road";
+
 export class LoopData {
-  constructor(private steps: PedNet | null, private parks: Ring[], private lat0: number) {}
+  constructor(
+    private steps: PedNet | null,
+    private parks: Ring[],
+    private lat0: number,
+    private network: PedNet | null = null,
+  ) {}
+
+  /** Snap a point to the nearest runnable network vertex (≤ 60 m), else itself. */
+  snap(lon: number, lat: number): [number, number] {
+    if (!this.network) return [lon, lat];
+    const p = this.network.nearest(lon, lat);
+    if (!p) return [lon, lat];
+    const mLon = mPerDegLon(this.lat0);
+    const d = Math.hypot((lon - p[0]) * mLon, (lat - p[1]) * M_PER_DEG_LAT);
+    return d <= 60 ? p : [lon, lat];
+  }
 
   /** Number of route vertices that sit on (≤ `thresh` m from) a staircase. */
   stepHits(coords: number[][], thresh = 8): number {
@@ -73,12 +91,24 @@ export async function fetchLoopData(bbox: Bbox, signal?: AbortSignal): Promise<L
   const b = `${bbox.s},${bbox.w},${bbox.n},${bbox.e}`;
   const query =
     `[out:json][timeout:60];(` +
-    `way["highway"="steps"](${b});` +
+    `way["highway"~"^(${RUNNABLE})$"](${b});` +
     `way["leisure"~"^(park|nature_reserve|garden|recreation_ground|common)$"](${b});` +
     `way["landuse"~"^(forest|grass|recreation_ground|meadow|village_green)$"](${b});` +
     `way["natural"="wood"](${b});` +
     `);out geom tags;`;
   const lat0 = (bbox.s + bbox.n) / 2;
+  const mLon = mPerDegLon(lat0);
+  const densify = (g: { lat: number; lon: number }[], out: [number, number][]) => {
+    for (let i = 0; i < g.length; i++) {
+      const p = g[i]!;
+      out.push([p.lon, p.lat]);
+      const q = g[i + 1];
+      if (!q) continue;
+      const dM = Math.hypot((q.lon - p.lon) * mLon, (q.lat - p.lat) * M_PER_DEG_LAT);
+      const n = Math.floor(dM / 12);
+      for (let k = 1; k <= n; k++) out.push([p.lon + ((q.lon - p.lon) * k) / (n + 1), p.lat + ((q.lat - p.lat) * k) / (n + 1)]);
+    }
+  };
 
   for (const url of OVERPASS_ENDPOINTS) {
     try {
@@ -94,29 +124,22 @@ export async function fetchLoopData(bbox: Bbox, signal?: AbortSignal): Promise<L
       const json = JSON.parse(text) as { elements?: OverpassWay[] };
 
       const stepPts: [number, number][] = [];
+      const netPts: [number, number][] = [];
       const parks: Ring[] = [];
       for (const el of json.elements ?? []) {
         if (el.type !== "way" || !el.geometry || el.geometry.length < 2) continue;
-        if (el.tags?.["highway"] === "steps") {
-          // Densify step ways so nearest-point distance is accurate.
-          const g = el.geometry;
-          const mLon = mPerDegLon(lat0);
-          for (let i = 0; i < g.length; i++) {
-            const p = g[i]!;
-            stepPts.push([p.lon, p.lat]);
-            const q = g[i + 1];
-            if (!q) continue;
-            const dM = Math.hypot((q.lon - p.lon) * mLon, (q.lat - p.lat) * M_PER_DEG_LAT);
-            const n = Math.floor(dM / 8);
-            for (let k = 1; k <= n; k++) stepPts.push([p.lon + ((q.lon - p.lon) * k) / (n + 1), p.lat + ((q.lat - p.lat) * k) / (n + 1)]);
-          }
+        const hw = el.tags?.["highway"];
+        if (hw) {
+          densify(el.geometry, netPts);       // runnable network (for snapping)
+          if (hw === "steps") densify(el.geometry, stepPts); // stairs (for scoring)
         } else {
           const r = toRing(el.geometry);
           if (r) parks.push(r);
         }
       }
       const steps = stepPts.length >= 4 ? new PedNet(stepPts, lat0) : null;
-      return new LoopData(steps, parks, lat0);
+      const network = netPts.length >= 20 ? new PedNet(netPts, lat0) : null;
+      return new LoopData(steps, parks, lat0, network);
     } catch {
       // try next endpoint
     }

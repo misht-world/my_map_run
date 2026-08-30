@@ -44,12 +44,12 @@ export class PedNet {
     return `${Math.floor(lon / this.cellDeg)},${Math.floor(lat / this.cellDeg)}`;
   }
 
-  /** Metres to the nearest network point, searching outward by cell rings. */
-  nearestDist(lon: number, lat: number): number {
+  /** Nearest indexed point + its distance (m), searching outward by cell rings. */
+  private nearestPoint(lon: number, lat: number): { d: number; p: [number, number] | null } {
     const mLon = mPerDegLon(this.lat0);
     const cx = Math.floor(lon / this.cellDeg), cy = Math.floor(lat / this.cellDeg);
-    let best = Infinity;
-    for (let ring = 0; ring <= 4; ring++) {
+    let best = Infinity, bp: [number, number] | null = null;
+    for (let ring = 0; ring <= 6; ring++) {
       for (let gx = cx - ring; gx <= cx + ring; gx++) {
         for (let gy = cy - ring; gy <= cy + ring; gy++) {
           // Only the outer shell of each ring (cells not covered by smaller rings).
@@ -58,14 +58,24 @@ export class PedNet {
           if (!arr) continue;
           for (let i = 0; i < arr.length; i += 2) {
             const d = Math.hypot((lon - arr[i]!) * mLon, (lat - arr[i + 1]!) * M_PER_DEG_LAT);
-            if (d < best) best = d;
+            if (d < best) { best = d; bp = [arr[i]!, arr[i + 1]!]; }
           }
         }
       }
       // Once we have a hit and searched one extra ring beyond it, stop.
       if (best < Infinity && ring >= 1) break;
     }
-    return best;
+    return { d: best, p: bp };
+  }
+
+  /** Metres to the nearest network point. */
+  nearestDist(lon: number, lat: number): number {
+    return this.nearestPoint(lon, lat).d;
+  }
+
+  /** Nearest indexed network point (for snapping waypoints), or null. */
+  nearest(lon: number, lat: number): [number, number] | null {
+    return this.nearestPoint(lon, lat).p;
   }
 }
 

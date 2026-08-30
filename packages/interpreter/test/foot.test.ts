@@ -26,6 +26,15 @@ describe("interpretNoRun — blocked (red dashed)", () => {
   it("trunk_link → blocked", () => {
     expect(interpretNoRun({ highway: "trunk_link" }).blocked).toBe(true);
   });
+  it("highway=construction → blocked", () => {
+    expect(interpretNoRun({ highway: "construction", construction: "footway" }).blocked).toBe(true);
+  });
+  it("construction footway with foot=designated → still blocked (not built yet)", () => {
+    expect(interpretNoRun({ highway: "construction", construction: "footway", foot: "designated", tunnel: "yes" }).blocked).toBe(true);
+  });
+  it("highway=proposed → blocked", () => {
+    expect(interpretNoRun({ highway: "proposed" }).blocked).toBe(true);
+  });
 });
 
 describe("interpretNoRun — not blocked (not drawn; basemap shows it)", () => {

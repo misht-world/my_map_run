@@ -5,6 +5,13 @@ const MOTOR_ONLY = new Set([
   "motorway", "motorway_link", "trunk", "trunk_link",
 ]);
 
+// Ways that don't physically exist as a usable path yet / any more. Blocked
+// regardless of foot=* (a construction footway with foot=designated is the
+// PLANNED state — you still can't walk it today).
+const NOT_BUILT = new Set([
+  "construction", "proposed", "disused", "abandoned", "razed", "planned",
+]);
+
 // service=* spurs we never show at all (neither as no-run nor otherwise).
 const EXCLUDED_SERVICE = new Set([
   "driveway", "parking_aisle", "alley", "drive-through", "drive_through",
@@ -37,6 +44,11 @@ export function interpretNoRun(tags: OsmTags): NoRunResult {
 
   const foot = tags["foot"];
   const access = tags["access"];
+
+  // Not-yet-built / no-longer-there ways: blocked even with foot=designated.
+  if (NOT_BUILT.has(highway)) {
+    return { blocked: true, reason: NoRunReason.CONSTRUCTION };
+  }
 
   // A positive foot permission means you CAN run — never a warning.
   if (footAllows(foot)) return { blocked: false, reason: null };

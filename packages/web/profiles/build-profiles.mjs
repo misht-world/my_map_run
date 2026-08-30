@@ -56,7 +56,8 @@ function transform(src) {
   s = s.replace(
     accessLine,
     "assign norun\n" +
-      "       if   foot=yes|designated|permissive                     then false\n" +
+      "       if   highway=construction|proposed|disused|abandoned|razed|planned then true\n" +
+      "       else if foot=yes|designated|permissive                     then false\n" +
       "       else if foot=no|private|use_sidepath                     then true\n" +
       "       else if access=no|private|customers                      then true\n" +
       "       else if highway=motorway|motorway_link|trunk|trunk_link  then true\n" +

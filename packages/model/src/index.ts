@@ -28,6 +28,7 @@ export const NoRunReason = {
   FOOT_FORBIDDEN: "foot=no|private|use_sidepath",
   ACCESS_FORBIDDEN: "access=no|private|customers",
   MOTORWAY: "highway=motorway|trunk",
+  CONSTRUCTION: "highway=construction|proposed|disused|abandoned",
 } as const;
 export type NoRunReasonCode = (typeof NoRunReason)[keyof typeof NoRunReason];
 

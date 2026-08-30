@@ -11,6 +11,7 @@
  * (Overpass) so BRouter is only hit for the top few.
  */
 import type { RouteResult, RunProfile } from "./routing.js";
+import type { PedNet } from "./pednet.js";
 
 export type ShapeName = "tree" | "heart" | "star";
 
@@ -123,6 +124,8 @@ export interface AutoFitOptions {
   keepUpright: boolean;
   profile: RunProfile;
   route: (wps: [number, number][], profile: RunProfile) => Promise<RouteResult | null>;
+  /** Local network index — enables the cheap pre-filter (route only the best). */
+  network?: PedNet | null;
   onProgress?: (done: number, total: number) => void;
 }
 
@@ -131,87 +134,100 @@ export interface AutoFitResult {
   alternatives: ShapeCandidate[];
 }
 
+interface Placement { center: [number, number]; size: number; rot: number; }
+
+/** Combined ranking: fidelity first, with a gentle nudge toward the target
+ *  distance (≈15 m of score per 10 % off target). */
+function combined(c: ShapeCandidate, targetM: number): number {
+  return c.meanDev + 150 * (Math.abs(c.res.distanceM - targetM) / targetM);
+}
+
 /**
  * Search placements and return the best-fitting runnable shape.
- * Coarse pass over centre×rotation at an estimated size, then a fine pass
- * around the best (tighter centre grid, nearby rotations, scale nudge).
+ *
+ * With a `network` index we score MANY placements cheaply (distance of the
+ * contour to the network) and route only the best handful through BRouter;
+ * without it we fall back to routing a bounded coarse set directly.
  */
 export async function autoFitShape(opts: AutoFitOptions): Promise<AutoFitResult> {
-  const { start, shape, targetM, keepUpright, profile, route, onProgress } = opts;
+  const { start, shape, targetM, keepUpright, profile, route, network, onProgress } = opts;
   const outline = SHAPES[shape];
   const dense = densify(outline);
   const P0 = perimeter(outline);
+  const sizeM = targetM / (1.4 * P0); // routed ≈ detour(≈1.4) × P0 × size
+  const mLon = mPerDegLon(start[1]);
 
-  // Size estimate: routed length ≈ detour × (P0 × size). Assume detour ≈ 1.4.
-  let sizeM = targetM / (1.4 * P0);
-
-  // The shape closes back to its first point; anchor that first point at the
-  // start so the run begins/ends where the user set it. We translate the whole
-  // placement so the outline's first vertex sits on `start`.
-  const anchoredCenter = (center: [number, number], sizeGuess: number, rot: number): [number, number] => {
-    const g = georeference(outline, center, sizeGuess, rot);
-    const first = g[0]!;
+  // The shape closes back to its first vertex; anchor that vertex at the start
+  // so the run begins/ends where the user set it.
+  const anchoredCenter = (center: [number, number], size: number, rot: number): [number, number] => {
+    const first = georeference(outline, center, size, rot)[0]!;
     return [center[0] + (start[0] - first[0]), center[1] + (start[1] - first[1])];
   };
 
-  const rotations = keepUpright ? [-12, 0, 12] : [0, 45, 90, 135, 180, 225, 270, 315];
-  const spanM = sizeM * 0.6; // coarse centre offsets scale with the shape
-  const mLon = mPerDegLon(start[1]);
-  const offsets: [number, number][] = [];
-  for (const gy of [-1, 0, 1]) for (const gx of [-1, 0, 1]) {
-    offsets.push([(gx * spanM) / mLon, (gy * spanM) / M_PER_DEG_LAT]);
-  }
+  const rotations = keepUpright ? [-12, -6, 0, 6, 12] : [0, 30, 60, 90, 120, 150, 180, 210, 240, 270, 300, 330];
 
-  const evalPlacement = async (center: [number, number], size: number, rot: number): Promise<ShapeCandidate | null> => {
-    const ac = anchoredCenter(center, size, rot);
-    const ideal = georeference(outline, ac, size, rot);
-    const denseGeo = georeference(dense, ac, size, rot);
+  /** Grid of raw candidate centres × rotations at one size. */
+  const placements = (gridN: number[], spanFactor: number): Placement[] => {
+    const span = sizeM * spanFactor;
+    const list: Placement[] = [];
+    for (const gy of gridN) for (const gx of gridN) for (const rot of rotations) {
+      list.push({ center: [start[0] + (gx * span) / mLon, start[1] + (gy * span) / M_PER_DEG_LAT], size: sizeM, rot });
+    }
+    return list;
+  };
+
+  const evalPlacement = async (pl: Placement): Promise<ShapeCandidate | null> => {
+    const ac = anchoredCenter(pl.center, pl.size, pl.rot);
+    const ideal = georeference(outline, ac, pl.size, pl.rot);
+    const denseGeo = georeference(dense, ac, pl.size, pl.rot);
     const res = await route(ideal.map((p) => [p[0], p[1]]), profile);
     if (!res || res.geometry.coordinates.length < 4) return null;
     const { meanDev, maxDev } = fitScore(res.geometry.coordinates as number[][], denseGeo, ac[1]);
-    return { center: ac, sizeM: size, rotDeg: rot, res, meanDev, maxDev, ideal };
+    return { center: ac, sizeM: pl.size, rotDeg: pl.rot, res, meanDev, maxDev, ideal };
   };
 
-  const cands: ShapeCandidate[] = [];
-  const coarse = offsets.flatMap((off) => rotations.map((rot) => ({ off, rot })));
-  const total = coarse.length + 12; // + fine pass budget (approx, for progress)
-  let done = 0;
+  // Pick which placements to actually route.
+  let toRoute: Placement[];
+  if (network) {
+    // Cheap pre-filter: mean network distance over a fine, many-rotation grid.
+    const pre = placements([-2, -1, 0, 1, 2], 0.3).map((pl) => {
+      const ac = anchoredCenter(pl.center, pl.size, pl.rot);
+      const dg = georeference(dense, ac, pl.size, pl.rot);
+      let sum = 0;
+      for (const p of dg) sum += network.nearestDist(p[0], p[1]);
+      return { pl, pre: sum / dg.length };
+    });
+    pre.sort((a, b) => a.pre - b.pre);
+    toRoute = pre.slice(0, 10).map((x) => x.pl);
+  } else {
+    toRoute = placements([-1, 0, 1], 0.6); // bounded coarse set
+  }
 
-  for (const { off, rot } of coarse) {
-    const center: [number, number] = [start[0] + off[0], start[1] + off[1]];
-    const c = await evalPlacement(center, sizeM, rot);
+  const total = toRoute.length + 4; // + scale-refinement budget (for progress)
+  let done = 0;
+  const cands: ShapeCandidate[] = [];
+  for (const pl of toRoute) {
+    const c = await evalPlacement(pl);
     if (c) cands.push(c);
     onProgress?.(++done, total);
   }
   if (!cands.length) return { best: null, alternatives: [] };
 
+  // Distance refinement: re-route the top-3 placements at a size scaled toward
+  // the target, so we hit the requested distance without losing fidelity.
   cands.sort((a, b) => a.meanDev - b.meanDev);
-  const top = cands[0]!;
-
-  // Scale nudge toward the target distance around the best placement.
-  const scaleFix = Math.min(1.5, Math.max(0.66, targetM / Math.max(1, top.res.distanceM)));
-  const fineSizes = [sizeM, sizeM * scaleFix];
-  const fineRots = keepUpright ? [top.rotDeg - 8, top.rotDeg, top.rotDeg + 8] : [top.rotDeg - 25, top.rotDeg, top.rotDeg + 25];
-  const fineOffsets: [number, number][] = [];
-  const fspan = spanM * 0.5;
-  for (const gy of [-1, 0, 1]) for (const gx of [-1, 0, 1]) {
-    fineOffsets.push([top.center[0] + (gx * fspan) / mLon, top.center[1] + (gy * fspan) / M_PER_DEG_LAT]);
-  }
-  // Keep the fine pass bounded: best-rotation over a tight centre grid at two sizes.
-  for (const size of fineSizes) {
-    for (const center of fineOffsets) {
-      const c = await evalPlacement(center, size, top.rotDeg);
-      if (c) cands.push(c);
+  const ref = cands[0]!;
+  const scaleFix = Math.min(1.5, Math.max(0.66, targetM / Math.max(1, ref.res.distanceM)));
+  if (Math.abs(scaleFix - 1) > 0.06) {
+    for (const c of cands.slice(0, 3)) {
+      // Recover the raw centre from the anchored one is unnecessary — re-anchor
+      // works off any centre, so reuse the anchored centre as the seed.
+      const nc = await evalPlacement({ center: c.center, size: sizeM * scaleFix, rot: c.rotDeg });
+      if (nc) cands.push(nc);
       onProgress?.(Math.min(total, ++done), total);
     }
   }
-  // A couple of rotation probes at the best centre/size.
-  for (const rot of fineRots) {
-    const c = await evalPlacement(top.center, top.res.distanceM > targetM ? sizeM * scaleFix : sizeM, rot);
-    if (c) cands.push(c);
-    onProgress?.(Math.min(total, ++done), total);
-  }
 
-  cands.sort((a, b) => a.meanDev - b.meanDev);
+  cands.sort((a, b) => combined(a, targetM) - combined(b, targetM));
   return { best: cands[0]!, alternatives: cands.slice(1, 5) };
 }

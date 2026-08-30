@@ -4,6 +4,7 @@ import {
   PROFILE_LABELS, type RunProfile, type RouteResult,
 } from "./routing.js";
 import { autoFitShape, SHAPE_LABELS, type ShapeName } from "./shape-art.js";
+import { fetchPedNetwork, type Bbox } from "./pednet.js";
 
 interface WayPoint { lngLat: LngLat; marker: maplibregl.Marker; dot: HTMLElement; }
 
@@ -361,11 +362,18 @@ export function initRoutePlanner(map: MLMap): RoutePlanner {
     const keepUpright = shapeUpright.checked;
 
     shapeGo.disabled = true; shapeGo.textContent = "Searching…";
-    statusEl.hidden = false; statusEl.textContent = "Auto-fitting shape…";
+    statusEl.hidden = false; statusEl.textContent = "Loading map data…";
     shapeProgress.hidden = false; shapeBar.style.width = "0%";
     try {
+      // Pull the local pedestrian network to pre-filter placements (best effort;
+      // falls back to routing a coarse set if Overpass is unavailable).
+      const rM = Math.min(8000, Math.max(1200, targetM * 0.35));
+      const dLat = rM / 111320, dLon = rM / (111320 * Math.cos((start[1] * Math.PI) / 180));
+      const bbox: Bbox = { s: start[1] - dLat, w: start[0] - dLon, n: start[1] + dLat, e: start[0] + dLon };
+      const network = await fetchPedNetwork(bbox).catch(() => null);
+      statusEl.textContent = network ? "Auto-fitting shape…" : "Auto-fitting shape (no prefilter)…";
       const { best } = await autoFitShape({
-        start, shape, targetM, keepUpright, profile, route: fetchRoute,
+        start, shape, targetM, keepUpright, profile, route: fetchRoute, network,
         onProgress: (d, t) => { shapeBar.style.width = `${Math.round((100 * d) / t)}%`; },
       });
       if (!best) {

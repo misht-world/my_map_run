@@ -3,6 +3,7 @@ import {
   fetchRoute, geocode, toGpx, fmtDistance, fmtDuration,
   PROFILE_LABELS, type RunProfile, type RouteResult,
 } from "./routing.js";
+import { autoFitShape, SHAPE_LABELS, type ShapeName } from "./shape-art.js";
 
 interface WayPoint { lngLat: LngLat; marker: maplibregl.Marker; dot: HTMLElement; }
 
@@ -101,12 +102,25 @@ export function initRoutePlanner(map: MLMap): RoutePlanner {
   const loopDist = $("route-loop-dist") as HTMLInputElement;
   const loopDir = $("route-loop-dir") as HTMLSelectElement;
   const loopGo = $("route-loop-go") as HTMLButtonElement;
+  const shapeCtl = $("route-shape-ctl");
+  const shapeName = $("route-shape-name") as HTMLSelectElement;
+  const shapeDist = $("route-shape-dist") as HTMLInputElement;
+  const shapeUpright = $("route-shape-upright") as HTMLInputElement;
+  const shapeGo = $("route-shape-go") as HTMLButtonElement;
+  const shapeProgress = $("route-shape-progress");
+  const shapeBar = $("route-shape-bar");
 
   // Populate the profile selector.
   for (const key of ["running", "trail"] as RunProfile[]) {
     const o = document.createElement("option");
     o.value = key; o.textContent = PROFILE_LABELS[key];
     profileSel.appendChild(o);
+  }
+  // Populate the shape selector.
+  for (const key of ["tree", "heart", "star"] as ShapeName[]) {
+    const o = document.createElement("option");
+    o.value = key; o.textContent = SHAPE_LABELS[key];
+    shapeName.appendChild(o);
   }
 
   const wps: WayPoint[] = [];
@@ -115,6 +129,12 @@ export function initRoutePlanner(map: MLMap): RoutePlanner {
   const routeSource = () => map.getSource("route") as maplibregl.GeoJSONSource | undefined;
   const setRoute = (geo: GeoJSON.Feature | null) =>
     routeSource()?.setData({ type: "FeatureCollection", features: geo ? [geo] : [] });
+  const shapeSource = () => map.getSource("shape-ideal") as maplibregl.GeoJSONSource | undefined;
+  const setShapeIdeal = (coords: [number, number][] | null) =>
+    shapeSource()?.setData({
+      type: "FeatureCollection",
+      features: coords ? [{ type: "Feature", geometry: { type: "LineString", coordinates: coords }, properties: {} }] : [],
+    });
 
   function role(i: number): "start" | "via" | "end" {
     if (i === 0) return "start";
@@ -168,6 +188,7 @@ export function initRoutePlanner(map: MLMap): RoutePlanner {
     wps.length = 0;
     result = null;
     setRoute(null);
+    setShapeIdeal(null);
     renderList();
     statusEl.hidden = true;
     errorEl.hidden = true;
@@ -325,15 +346,66 @@ export function initRoutePlanner(map: MLMap): RoutePlanner {
     }
   }
 
+  // ── Shape run (GPS art) — auto-fit a template onto the running network ─────
+  async function generateShape() {
+    errorEl.hidden = true;
+    if (wps.length < 1) {
+      errorEl.hidden = false;
+      errorEl.textContent = "Set a start point first (right-click → Route: set start).";
+      return;
+    }
+    const start: [number, number] = [wps[0]!.lngLat.lng, wps[0]!.lngLat.lat];
+    const targetM = Math.max(1, Number(shapeDist.value) || 5) * 1000;
+    const profile = profileSel.value as RunProfile;
+    const shape = shapeName.value as ShapeName;
+    const keepUpright = shapeUpright.checked;
+
+    shapeGo.disabled = true; shapeGo.textContent = "Searching…";
+    statusEl.hidden = false; statusEl.textContent = "Auto-fitting shape…";
+    shapeProgress.hidden = false; shapeBar.style.width = "0%";
+    try {
+      const { best } = await autoFitShape({
+        start, shape, targetM, keepUpright, profile, route: fetchRoute,
+        onProgress: (d, t) => { shapeBar.style.width = `${Math.round((100 * d) / t)}%`; },
+      });
+      if (!best) {
+        setRoute(null); setShapeIdeal(null); result = null; gpxBtn.hidden = true;
+        statusEl.hidden = true;
+        errorEl.hidden = false;
+        errorEl.textContent = "Couldn't fit a shape here — try a denser area, other distance or shape.";
+        return;
+      }
+      result = best.res;
+      setShapeIdeal(best.ideal);
+      setRoute({ type: "Feature", geometry: best.res.geometry, properties: {} });
+      statusEl.textContent =
+        `${fmtDistance(best.res.distanceM)} · fit ±${Math.round(best.meanDev)} m · ↑${Math.round(best.res.ascentM)} m`;
+      gpxBtn.hidden = false;
+      const lons = best.res.geometry.coordinates.map((c) => c[0]!);
+      const lats = best.res.geometry.coordinates.map((c) => c[1]!);
+      map.fitBounds([[Math.min(...lons), Math.min(...lats)], [Math.max(...lons), Math.max(...lats)]],
+        { padding: 60, maxZoom: 16 });
+    } finally {
+      shapeGo.disabled = false; shapeGo.textContent = "Auto-fit shape from start";
+      shapeProgress.hidden = true;
+    }
+  }
+
   function applyMode() {
-    const loop = modeSel.value === "loop";
-    loopCtl.hidden = !loop;
-    setRoute(null); statusEl.hidden = true; errorEl.hidden = true; gpxBtn.hidden = true; result = null;
+    const m = modeSel.value;
+    loopCtl.hidden = m !== "loop";
+    shapeCtl.hidden = m !== "shape";
+    setRoute(null); setShapeIdeal(null); statusEl.hidden = true; errorEl.hidden = true; gpxBtn.hidden = true; result = null;
   }
   modeSel.addEventListener("change", applyMode);
   loopGo.addEventListener("click", () => void generateLoop());
+  shapeGo.addEventListener("click", () => void generateShape());
 
-  profileSel.addEventListener("change", () => { modeSel.value === "loop" ? void generateLoop() : void rebuild(); });
+  profileSel.addEventListener("change", () => {
+    if (modeSel.value === "loop") void generateLoop();
+    else if (modeSel.value === "ptp") void rebuild();
+    // shape mode: the user re-runs via the Auto-fit button
+  });
   clearBtn.addEventListener("click", clearAll);
   applyMode();
 

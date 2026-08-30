@@ -136,6 +136,18 @@ export const overlayLayers: LayerSpecification[] = [
     layout: poiIcon("poi-toilets"),
   },
 
+  // ── Shape-run ideal outline — faint dashed target, under the route ────────
+  {
+    id: "shape-ideal-line", type: "line", source: "shape-ideal",
+    layout: { "line-cap": "round", "line-join": "round" },
+    paint: {
+      "line-color": "#7a7a7a",
+      "line-width": ["interpolate", ["linear"], ["zoom"], 10, 1.5, 16, 2.5],
+      "line-dasharray": [2, 2],
+      "line-opacity": 0.7,
+    },
+  },
+
   // ── Planned route (BRouter) — blue line with white casing, on top ─────────
   {
     id: "route-casing", type: "line", source: "route",

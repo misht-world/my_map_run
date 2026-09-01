@@ -20,8 +20,12 @@ MD5_URL="${URL}.md5"
 mkdir -p "$DATA_DIR"
 cd "$DATA_DIR"
 
+# Geofabrik occasionally returns transient 5xx (e.g. 502) — retry rather than
+# failing the whole build. --retry-all-errors covers HTTP error responses too.
+CURL_RETRY=(--retry 6 --retry-delay 15 --retry-all-errors --connect-timeout 30)
+
 echo "[fetch] downloading md5 from ${MD5_URL}"
-curl -sSL -o europe-latest.osm.pbf.md5.raw "$MD5_URL"
+curl -sSL "${CURL_RETRY[@]}" -o europe-latest.osm.pbf.md5.raw "$MD5_URL"
 # Geofabrik's .md5 references the dated filename; we save locally as
 # europe-latest.osm.pbf. Rewrite the filename column.
 EXPECTED_HASH="$(awk '{print $1}' europe-latest.osm.pbf.md5.raw)"
@@ -37,7 +41,7 @@ if [[ -f europe-latest.osm.pbf ]]; then
 fi
 
 echo "[fetch] downloading ${URL}"
-curl -L --fail -o europe-latest.osm.pbf "$URL"
+curl -L --fail "${CURL_RETRY[@]}" -o europe-latest.osm.pbf "$URL"
 
 if md5sum -c europe-latest.osm.pbf.md5; then
   echo "[fetch] md5 OK"

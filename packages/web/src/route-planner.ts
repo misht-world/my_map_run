@@ -261,7 +261,7 @@ export function initRoutePlanner(map: MLMap): RoutePlanner {
   // ── Round-trip (loop) generation ────────────────────────────────────────
   interface LoopCand {
     res: RouteResult; shape: LoopShape; heading: number; size: number;
-    dist: number; asc: number; bt: number; steps: number; park: number; crossings: number; notBuilt: number;
+    dist: number; asc: number; bt: number; steps: number; park: number; crossings: number; notBuilt: number; poi: number;
   }
 
   async function generateLoop() {
@@ -291,7 +291,7 @@ export function initRoutePlanner(map: MLMap): RoutePlanner {
         // Snap intermediate waypoints onto the network so the route doesn't
         // detour to reach an off-path point; keep the start (index 0 / last) exact.
         const wp: [number, number][] = raw.map((p, i) =>
-          data && i > 0 && i < raw.length - 1 ? data.snap(p[0], p[1]) : p);
+          data && i > 0 && i < raw.length - 1 ? data.attract(p[0], p[1]) : p);
         const res = await fetchRoute(wp, profile);
         if (!res || res.coords3d.length < 4) return null;
         const trimmed = removeSmallLoops(trimSpurs(res.coords3d), 300);
@@ -312,6 +312,7 @@ export function initRoutePlanner(map: MLMap): RoutePlanner {
           steps: data ? data.stepHits(coords2d) : 0, park: data ? data.parkFraction(coords2d) : 0,
           crossings: data ? data.crossingHits(coords2d) : 0,
           notBuilt: data ? data.notBuiltHits(coords2d) : 0,
+          poi: data ? data.poiHits(coords2d) : 0,
         };
       };
 
@@ -322,9 +323,10 @@ export function initRoutePlanner(map: MLMap): RoutePlanner {
         const gradePerKm = c.asc / Math.max(0.1, c.dist / 1000);
         const distPen = 100 * (Math.abs(c.dist - targetM) / targetM);
         const notBuiltPen = c.notBuilt * 500; // any not-built way (e.g. a proposed bridge) disqualifies
+        const poiBonus = Math.min(c.poi, 10) * 2.5; // reward passing interesting spots (capped)
         if (profile === "running")
-          return notBuiltPen + c.bt + gradePerKm + c.steps * 1.2 + c.crossings * 0.25 - c.park * 30 + distPen;
-        return notBuiltPen + c.bt * 1.2 + c.crossings * 0.1 - c.park * 20 + distPen;
+          return notBuiltPen + c.bt + gradePerKm + c.steps * 1.2 + c.crossings * 0.25 - c.park * 30 - poiBonus + distPen;
+        return notBuiltPen + c.bt * 1.2 + c.crossings * 0.1 - c.park * 20 - poiBonus + distPen;
       };
 
       const dir = loopDir.value;
@@ -488,7 +490,7 @@ export function initRoutePlanner(map: MLMap): RoutePlanner {
           const mt = 1 - t;
           let lon = mt * mt * A[0] + 2 * mt * t * cx + t * t * B[0];
           let lat = mt * mt * A[1] + 2 * mt * t * cy + t * t * B[1];
-          if (data) { const s = data.snap(lon, lat); lon = s[0]; lat = s[1]; }
+          if (data) { const s = data.attract(lon, lat); lon = s[0]; lat = s[1]; }
           via.push([lon, lat]);
         }
         const res = await fetchRoute([A, ...via, B], profile);
@@ -509,6 +511,7 @@ export function initRoutePlanner(map: MLMap): RoutePlanner {
           res: cleaned, dist, asc,
           steps: data ? data.stepHits(c2) : 0, park: data ? data.parkFraction(c2) : 0,
           crossings: data ? data.crossingHits(c2) : 0, notBuilt: data ? data.notBuiltHits(c2) : 0,
+          poi: data ? data.poiHits(c2) : 0,
         };
       };
 
@@ -525,7 +528,7 @@ export function initRoutePlanner(map: MLMap): RoutePlanner {
       }
       const score = (c: (typeof cands)[number]) =>
         c.notBuilt * 500 + c.steps * 1.2 + c.crossings * 0.25 + (c.asc / Math.max(0.1, c.dist / 1000)) * 0.5
-        - c.park * 30 + 100 * (Math.abs(c.dist - targetM) / targetM);
+        - c.park * 30 - Math.min(c.poi, 10) * 2.5 + 100 * (Math.abs(c.dist - targetM) / targetM);
       cands.sort((a, b) => score(a) - score(b));
       paddedAlts = cands.slice(0, 4).map((c) => ({ res: c.res, steps: c.steps, park: c.park }));
       showPadded(0);

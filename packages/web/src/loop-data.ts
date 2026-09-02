@@ -50,7 +50,31 @@ export class LoopData {
     private network: PedNet | null = null,
     private crossings: PedNet | null = null,
     private notBuilt: PedNet | null = null,
+    private pois: PedNet | null = null,
   ) {}
+
+  /** Snap toward an interesting POI (viewpoint, spring, cave, water…) if one is
+   *  within `radiusM`, else fall back to the plain network snap. Used to nudge a
+   *  guide waypoint so the route passes by scenic/useful spots. */
+  attract(lon: number, lat: number, radiusM = 40): [number, number] {
+    if (this.pois) {
+      const q = this.pois.nearest(lon, lat);
+      if (q) {
+        const mLon = mPerDegLon(this.lat0);
+        const d = Math.hypot((lon - q[0]) * mLon, (lat - q[1]) * M_PER_DEG_LAT);
+        if (d <= radiusM) return this.network ? (this.network.nearest(q[0], q[1]) ?? q) : q;
+      }
+    }
+    return this.snap(lon, lat);
+  }
+
+  /** Route vertices that pass close (≤ `thresh` m) to an interesting POI. */
+  poiHits(coords: number[][], thresh = 25): number {
+    if (!this.pois) return 0;
+    let n = 0;
+    for (const c of coords) if (this.pois.nearestDist(c[0]!, c[1]!) < thresh) n++;
+    return n;
+  }
 
   /** Route vertices on a not-built way (construction/proposed/… — e.g. a
    *  proposed bridge). Any hit should disqualify a loop candidate. */
@@ -118,6 +142,12 @@ export async function fetchLoopData(bbox: Bbox, signal?: AbortSignal): Promise<L
     `way["natural"="wood"](${b});` +
     `way["highway"~"^(construction|proposed|planned|razed|disused|abandoned)$"](${b});` +
     `node["highway"="crossing"](${b});` +
+    // Interesting spots to route past.
+    `node["tourism"~"^(viewpoint|attraction|artwork)$"](${b});` +
+    `node["natural"~"^(cave_entrance|spring|waterfall|peak|arch|geyser)$"](${b});` +
+    `node["amenity"~"^(drinking_water|fountain)$"](${b});` +
+    `node["man_made"~"^(water_tap|water_well)$"](${b});` +
+    `node["historic"~"^(monument|memorial|castle|ruins|monastery|archaeological_site)$"](${b});` +
     `);out geom tags;`;
   const lat0 = (bbox.s + bbox.n) / 2;
   const mLon = mPerDegLon(lat0);
@@ -150,11 +180,13 @@ export async function fetchLoopData(bbox: Bbox, signal?: AbortSignal): Promise<L
       const stepPts: [number, number][] = [];
       const netPts: [number, number][] = [];
       const crossPts: [number, number][] = [];
+      const poiPts: [number, number][] = [];
       const notBuiltPts: [number, number][] = [];
       const parks: Ring[] = [];
       for (const el of json.elements ?? []) {
         if (el.type === "node" && el.lon !== undefined && el.lat !== undefined) {
-          crossPts.push([el.lon, el.lat]);
+          if (el.tags?.["highway"] === "crossing") crossPts.push([el.lon, el.lat]);
+          else poiPts.push([el.lon, el.lat]); // interesting spot
           continue;
         }
         if (el.type !== "way" || !el.geometry || el.geometry.length < 2) continue;
@@ -173,7 +205,8 @@ export async function fetchLoopData(bbox: Bbox, signal?: AbortSignal): Promise<L
       const network = netPts.length >= 20 ? new PedNet(netPts, lat0) : null;
       const crossings = crossPts.length >= 1 ? new PedNet(crossPts, lat0) : null;
       const notBuilt = notBuiltPts.length >= 2 ? new PedNet(notBuiltPts, lat0) : null;
-      return new LoopData(steps, parks, lat0, network, crossings, notBuilt);
+      const pois = poiPts.length >= 1 ? new PedNet(poiPts, lat0) : null;
+      return new LoopData(steps, parks, lat0, network, crossings, notBuilt, pois);
     } catch {
       // try next endpoint
     }

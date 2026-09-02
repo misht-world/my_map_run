@@ -178,7 +178,7 @@ assign footaccess     or issidewalk
                       switch foot=      defaultaccess    not foot=private|no|use_sidepath
 
 assign norun
-       if   highway=construction|proposed|disused|abandoned|razed|planned then true
+       if   highway=construction|proposed|abandoned          then true
        else if foot=yes|designated|permissive                     then false
        else if foot=no|private|use_sidepath                     then true
        else if access=no|private|customers                      then true

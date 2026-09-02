@@ -44,28 +44,49 @@ export interface RouteResult {
   durationS: number;
 }
 
-// Session cache of uploaded custom-profile ids, plus a "don't retry" flag.
-const uploadedIds: Partial<Record<RunProfile, string>> = {};
-const uploadFailed: Partial<Record<RunProfile, boolean>> = {};
+// Session cache of uploaded custom-profile ids, keyed by cacheKey (includes the
+// stairs toggle so running-with-stairs and running-without are cached apart).
+const uploadedIds: Record<string, string> = {};
+const uploadFailed: Record<string, boolean> = {};
 
-/** Upload the custom profile (once per session) and return its BRouter id. */
+// Running forbids stairs by default; the UI can opt in.
+let stairsAllowed = false;
+const cacheKey = (profile: RunProfile) => `${profile}:${profile === "running" && stairsAllowed ? 1 : 0}`;
+
+/** Toggle stair use for the running profile (clears its cached upload). */
+export function setStairsAllowed(v: boolean): void {
+  if (v === stairsAllowed) return;
+  stairsAllowed = v;
+  for (const k of ["running:0", "running:1"]) { delete uploadedIds[k]; delete uploadFailed[k]; }
+}
+
+/** Profile text to upload — running flips allow_steps on when stairs allowed. */
+function profileBody(profile: RunProfile): string {
+  if (profile === "running" && stairsAllowed) {
+    return PROFILE_BRF.running.replace(/(assign\s+allow_steps\s+)false/, "$1true");
+  }
+  return PROFILE_BRF[profile];
+}
+
+/** Upload the custom profile (once per session/variant) and return its id. */
 async function uploadProfile(profile: RunProfile): Promise<string | null> {
-  if (uploadedIds[profile]) return uploadedIds[profile]!;
-  if (uploadFailed[profile]) return null;
+  const key = cacheKey(profile);
+  if (uploadedIds[key]) return uploadedIds[key]!;
+  if (uploadFailed[key]) return null;
   try {
     const r = await fetch(BROUTER_UPLOAD, {
       method: "POST",
       headers: { "Content-Type": "text/plain" },
-      body: PROFILE_BRF[profile],
+      body: profileBody(profile),
       signal: AbortSignal.timeout(12000),
     });
     if (!r.ok) throw new Error(String(r.status));
     const j = (await r.json()) as { profileid?: string };
     if (!j.profileid) throw new Error("no id");
-    uploadedIds[profile] = j.profileid;
+    uploadedIds[key] = j.profileid;
     return j.profileid;
   } catch {
-    uploadFailed[profile] = true; // fall back for the rest of the session
+    uploadFailed[key] = true; // fall back for the rest of the session
     return null;
   }
 }
@@ -107,7 +128,7 @@ export async function fetchRoute(
     const r = await routeOnce(lonlats, customId);
     if (r) return r;
     // The server may have evicted the uploaded profile — re-upload once.
-    delete uploadedIds[profile];
+    delete uploadedIds[cacheKey(profile)];
     const id2 = await uploadProfile(profile);
     if (id2) {
       const r2 = await routeOnce(lonlats, id2);

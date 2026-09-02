@@ -49,7 +49,17 @@ export class LoopData {
     private lat0: number,
     private network: PedNet | null = null,
     private crossings: PedNet | null = null,
+    private notBuilt: PedNet | null = null,
   ) {}
+
+  /** Route vertices on a not-built way (construction/proposed/… — e.g. a
+   *  proposed bridge). Any hit should disqualify a loop candidate. */
+  notBuiltHits(coords: number[][], thresh = 12): number {
+    if (!this.notBuilt) return 0;
+    let n = 0;
+    for (const c of coords) if (this.notBuilt.nearestDist(c[0]!, c[1]!) < thresh) n++;
+    return n;
+  }
 
   /** Number of route vertices that sit on (≤ `thresh` m from) a crossing node.
    *  A cluster of these means the route is circling a junction over several
@@ -106,6 +116,7 @@ export async function fetchLoopData(bbox: Bbox, signal?: AbortSignal): Promise<L
     `way["leisure"~"^(park|nature_reserve|garden|recreation_ground|common)$"](${b});` +
     `way["landuse"~"^(forest|grass|recreation_ground|meadow|village_green)$"](${b});` +
     `way["natural"="wood"](${b});` +
+    `way["highway"~"^(construction|proposed|planned|razed|disused|abandoned)$"](${b});` +
     `node["highway"="crossing"](${b});` +
     `);out geom tags;`;
   const lat0 = (bbox.s + bbox.n) / 2;
@@ -135,9 +146,11 @@ export async function fetchLoopData(bbox: Bbox, signal?: AbortSignal): Promise<L
       if (text[0] !== "{") continue; // an error page, not JSON — try next
       const json = JSON.parse(text) as { elements?: OverpassEl[] };
 
+      const NOTBUILT = new Set(["construction", "proposed", "planned", "razed", "disused", "abandoned"]);
       const stepPts: [number, number][] = [];
       const netPts: [number, number][] = [];
       const crossPts: [number, number][] = [];
+      const notBuiltPts: [number, number][] = [];
       const parks: Ring[] = [];
       for (const el of json.elements ?? []) {
         if (el.type === "node" && el.lon !== undefined && el.lat !== undefined) {
@@ -146,7 +159,9 @@ export async function fetchLoopData(bbox: Bbox, signal?: AbortSignal): Promise<L
         }
         if (el.type !== "way" || !el.geometry || el.geometry.length < 2) continue;
         const hw = el.tags?.["highway"];
-        if (hw) {
+        if (hw && NOTBUILT.has(hw)) {
+          densify(el.geometry, notBuiltPts);  // not walkable (don't snap here)
+        } else if (hw) {
           densify(el.geometry, netPts);       // runnable network (for snapping)
           if (hw === "steps") densify(el.geometry, stepPts); // stairs (for scoring)
         } else {
@@ -157,7 +172,8 @@ export async function fetchLoopData(bbox: Bbox, signal?: AbortSignal): Promise<L
       const steps = stepPts.length >= 4 ? new PedNet(stepPts, lat0) : null;
       const network = netPts.length >= 20 ? new PedNet(netPts, lat0) : null;
       const crossings = crossPts.length >= 1 ? new PedNet(crossPts, lat0) : null;
-      return new LoopData(steps, parks, lat0, network, crossings);
+      const notBuilt = notBuiltPts.length >= 2 ? new PedNet(notBuiltPts, lat0) : null;
+      return new LoopData(steps, parks, lat0, network, crossings, notBuilt);
     } catch {
       // try next endpoint
     }

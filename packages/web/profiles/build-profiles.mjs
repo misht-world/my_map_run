@@ -56,7 +56,7 @@ function transform(src) {
   s = s.replace(
     accessLine,
     "assign norun\n" +
-      "       if   highway=construction|proposed|disused|abandoned|razed|planned then true\n" +
+      "       if   highway=construction|proposed|abandoned          then true\n" +
       "       else if foot=yes|designated|permissive                     then false\n" +
       "       else if foot=no|private|use_sidepath                     then true\n" +
       "       else if access=no|private|customers                      then true\n" +
@@ -118,7 +118,8 @@ const common = transform(base);
 let running = common;
 running = setParam(running, "SAC_scale_limit", "1"); // no mountain scrambling
 running = setParam(running, "SAC_scale_preferred", "0");
-running = setParam(running, "steps_cost", "14.0"); // strongly avoid stairs
+running = setParam(running, "allow_steps", "false"); // default: no stairs at all (UI can allow)
+running = setParam(running, "steps_cost", "14.0"); // used only when stairs are allowed
 running = setParam(running, "crossing_penalty", "20"); // slight dislike of lights, but low enough not to detour around a junction
 running = setParam(running, "path_extra", "0.7"); // prefer footway over path (noticeable, not a ban)
 running = setParam(running, "consider_town", "false");

@@ -208,6 +208,8 @@ details.block > .block-body { padding-top: 6px; }
 }
 #route-loop-go:hover { filter: brightness(1.08); }
 #route-loop-go:disabled { opacity: 0.6; cursor: default; }
+.allow-stairs { display: block; font-size: 11px; color: var(--muted); margin: 6px 0 2px; cursor: pointer; }
+.allow-stairs input { vertical-align: -1px; margin-right: 4px; }
 #route-shape-dist { max-width: 70px; }
 .shape-upright { display: block; font-size: 11px; color: var(--muted); margin: 2px 0 6px; }
 #route-shape-go {

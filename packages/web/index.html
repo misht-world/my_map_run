@@ -94,6 +94,23 @@
               </div>
             </div>
 
+            <!-- Point A→B: optionally pad the mileage with detour alternatives -->
+            <div id="route-ptp-ctl" hidden>
+              <div class="route-loop-row">
+                <label>Target distance
+                  <input id="route-ptp-dist" type="number" value="10" min="1" max="60" step="0.5" /> km
+                </label>
+              </div>
+              <div class="route-btns">
+                <button id="route-ptp-go" type="button">Pad to distance</button>
+                <button id="route-ptp-next" type="button" hidden>Other option ↻</button>
+              </div>
+              <p class="hint" style="margin:4px 0 0">
+                Adds detours between start and finish to reach the distance, avoiding
+                stairs like the rest. Leave it and just set A→B for the shortest route.
+              </p>
+            </div>
+
             <div class="route-search-row">
               <input id="route-search-input" type="text" placeholder="Place or lat, lon" />
               <button id="route-search-add" type="button">Add</button>

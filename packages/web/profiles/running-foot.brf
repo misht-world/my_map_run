@@ -36,13 +36,13 @@ assign  SAC_K1 0.05                    # Penalizing of SAC levels below preferre
 assign  SAC_K2 0.6                     # Penalizing of SAC levels above preferred
 
 #orientation/decision penalties, not used for preferred hiking routes
-assign   turncost_value           40 # not used now
+assign   turncost_value           60 # not used now
 assign   initialcost_value        0 # not used now
 
 #less frequently changed flags
 assign   allow_steps              true   # %allow_steps% | Set to false to disallow steps | boolean
-assign   steps_cost               8.0    # %steps_cost% | Cost multiplier for steps when allowed (higher = avoid stairs more) | number
-assign   crossing_penalty         60    # %crossing_penalty% | Extra cost (approx. meters) added per traffic-signal crossing node | number
+assign   steps_cost               14.0    # %steps_cost% | Cost multiplier for steps when allowed (higher = avoid stairs more) | number
+assign   crossing_penalty         20    # %crossing_penalty% | Extra cost (approx. meters) added per traffic-signal crossing node | number
 assign   path_extra               0.7    # %path_extra% | Extra cost on highway=path, to prefer footway over path | number
 assign   allow_ferries            true   # %allow_ferries% | set to false to disallow ferries | boolean
 

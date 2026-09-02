@@ -48,7 +48,18 @@ export class LoopData {
     private parks: Ring[],
     private lat0: number,
     private network: PedNet | null = null,
+    private crossings: PedNet | null = null,
   ) {}
+
+  /** Number of route vertices that sit on (≤ `thresh` m from) a crossing node.
+   *  A cluster of these means the route is circling a junction over several
+   *  crossings instead of crossing once. */
+  crossingHits(coords: number[][], thresh = 12): number {
+    if (!this.crossings) return 0;
+    let n = 0;
+    for (const c of coords) if (this.crossings.nearestDist(c[0]!, c[1]!) < thresh) n++;
+    return n;
+  }
 
   /** Snap a point to the nearest runnable network vertex (≤ 60 m), else itself. */
   snap(lon: number, lat: number): [number, number] {
@@ -84,7 +95,7 @@ export class LoopData {
   }
 }
 
-interface OverpassWay { type: string; tags?: Record<string, string>; geometry?: { lat: number; lon: number }[]; }
+interface OverpassEl { type: string; tags?: Record<string, string>; geometry?: { lat: number; lon: number }[]; lat?: number; lon?: number; }
 
 /** Fetch steps + parks/green for a bbox, or null if Overpass is unavailable. */
 export async function fetchLoopData(bbox: Bbox, signal?: AbortSignal): Promise<LoopData | null> {
@@ -95,6 +106,7 @@ export async function fetchLoopData(bbox: Bbox, signal?: AbortSignal): Promise<L
     `way["leisure"~"^(park|nature_reserve|garden|recreation_ground|common)$"](${b});` +
     `way["landuse"~"^(forest|grass|recreation_ground|meadow|village_green)$"](${b});` +
     `way["natural"="wood"](${b});` +
+    `node["highway"="crossing"](${b});` +
     `);out geom tags;`;
   const lat0 = (bbox.s + bbox.n) / 2;
   const mLon = mPerDegLon(lat0);
@@ -121,12 +133,17 @@ export async function fetchLoopData(bbox: Bbox, signal?: AbortSignal): Promise<L
       if (!resp.ok) continue;
       const text = await resp.text();
       if (text[0] !== "{") continue; // an error page, not JSON — try next
-      const json = JSON.parse(text) as { elements?: OverpassWay[] };
+      const json = JSON.parse(text) as { elements?: OverpassEl[] };
 
       const stepPts: [number, number][] = [];
       const netPts: [number, number][] = [];
+      const crossPts: [number, number][] = [];
       const parks: Ring[] = [];
       for (const el of json.elements ?? []) {
+        if (el.type === "node" && el.lon !== undefined && el.lat !== undefined) {
+          crossPts.push([el.lon, el.lat]);
+          continue;
+        }
         if (el.type !== "way" || !el.geometry || el.geometry.length < 2) continue;
         const hw = el.tags?.["highway"];
         if (hw) {
@@ -139,7 +156,8 @@ export async function fetchLoopData(bbox: Bbox, signal?: AbortSignal): Promise<L
       }
       const steps = stepPts.length >= 4 ? new PedNet(stepPts, lat0) : null;
       const network = netPts.length >= 20 ? new PedNet(netPts, lat0) : null;
-      return new LoopData(steps, parks, lat0, network);
+      const crossings = crossPts.length >= 1 ? new PedNet(crossPts, lat0) : null;
+      return new LoopData(steps, parks, lat0, network, crossings);
     } catch {
       // try next endpoint
     }

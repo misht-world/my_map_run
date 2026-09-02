@@ -255,7 +255,7 @@ export function initRoutePlanner(map: MLMap): RoutePlanner {
   // ── Round-trip (loop) generation ────────────────────────────────────────
   interface LoopCand {
     res: RouteResult; shape: LoopShape; heading: number; size: number;
-    dist: number; asc: number; bt: number; steps: number; park: number;
+    dist: number; asc: number; bt: number; steps: number; park: number; crossings: number;
   }
 
   async function generateLoop() {
@@ -304,6 +304,7 @@ export function initRoutePlanner(map: MLMap): RoutePlanner {
         return {
           res: cleaned, shape, heading, size, dist, asc, bt: backtrackPct(coords2d),
           steps: data ? data.stepHits(coords2d) : 0, park: data ? data.parkFraction(coords2d) : 0,
+          crossings: data ? data.crossingHits(coords2d) : 0,
         };
       };
 
@@ -313,8 +314,9 @@ export function initRoutePlanner(map: MLMap): RoutePlanner {
       const score = (c: LoopCand): number => {
         const gradePerKm = c.asc / Math.max(0.1, c.dist / 1000);
         const distPen = 100 * (Math.abs(c.dist - targetM) / targetM);
-        if (profile === "running") return c.bt + gradePerKm + c.steps * 0.7 - c.park * 30 + distPen;
-        return c.bt * 1.2 - c.park * 20 + distPen;
+        if (profile === "running")
+          return c.bt + gradePerKm + c.steps * 1.2 + c.crossings * 0.25 - c.park * 30 + distPen;
+        return c.bt * 1.2 + c.crossings * 0.1 - c.park * 20 + distPen;
       };
 
       const dir = loopDir.value;

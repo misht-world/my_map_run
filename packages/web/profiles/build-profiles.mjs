@@ -118,8 +118,8 @@ const common = transform(base);
 let running = common;
 running = setParam(running, "SAC_scale_limit", "1"); // no mountain scrambling
 running = setParam(running, "SAC_scale_preferred", "0");
-running = setParam(running, "steps_cost", "8.0"); // strongly avoid stairs
-running = setParam(running, "crossing_penalty", "60"); // mild dislike of traffic lights (not so high it jaywalks)
+running = setParam(running, "steps_cost", "14.0"); // strongly avoid stairs
+running = setParam(running, "crossing_penalty", "20"); // slight dislike of lights, but low enough not to detour around a junction
 running = setParam(running, "path_extra", "0.7"); // prefer footway over path (noticeable, not a ban)
 running = setParam(running, "consider_town", "false");
 running = setParam(running, "consider_forest", "true"); // lean to parks / green areas
@@ -127,7 +127,7 @@ running = setParam(running, "consider_river", "true"); // lean to riverside / la
 running = setParam(running, "consider_elevation", "true"); // prefer flatter routes
 running = setParam(running, "uphillcostvalue", "10"); // stronger avoidance of climbs
 running = setParam(running, "downhillcostvalue", "10"); // ...and steep descents
-running = setParam(running, "turncost_value", "40"); // avoid sharp / zig-zag turns
+running = setParam(running, "turncost_value", "60"); // prefer straighter paths (fewer zig-zags)
 running = setParam(running, "hiking_routes_preference", "1.2"); // follow recognized foot/walking-network corridors
 writeFileSync(join(here, "running-foot.brf"), running);
 

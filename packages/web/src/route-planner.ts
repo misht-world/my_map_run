@@ -264,6 +264,106 @@ export function initRoutePlanner(map: MLMap): RoutePlanner {
     dist: number; asc: number; bt: number; steps: number; park: number; crossings: number; notBuilt: number; poi: number;
   }
 
+  // Round trip through a finish point: out to F on one side, back on the other,
+  // so it's a loop (not an out-and-back), sized to the target distance.
+  async function generateLoopViaFinish() {
+    const A: [number, number] = [wps[0]!.lngLat.lng, wps[0]!.lngLat.lat];
+    const F: [number, number] = [wps[wps.length - 1]!.lngLat.lng, wps[wps.length - 1]!.lngLat.lat];
+    const targetM = Math.max(1, Number(loopDist.value) || 5) * 1000;
+    const profile = profileSel.value as RunProfile;
+
+    loopGo.disabled = true; loopGo.textContent = "Generating…";
+    statusEl.hidden = false; statusEl.textContent = "Analyzing area…";
+    try {
+      const mid: [number, number] = [(A[0] + F[0]) / 2, (A[1] + F[1]) / 2];
+      const rM = Math.min(9000, Math.max(2000, targetM / 2));
+      const dLat = rM / 111320, dLon = rM / (111320 * Math.cos((mid[1] * Math.PI) / 180));
+      const bbox: Bbox = { s: mid[1] - dLat, w: mid[0] - dLon, n: mid[1] + dLat, e: mid[0] + dLon };
+      const data = await fetchLoopData(bbox).catch(() => null);
+
+      const mLon = 111320 * Math.cos((mid[1] * Math.PI) / 180);
+      const abx = (F[0] - A[0]) * mLon, aby = (F[1] - A[1]) * 111320;
+      const d0 = Math.hypot(abx, aby) || 1;
+      const px = -aby / d0, py = abx / d0; // perpendicular unit (metres)
+
+      // Bézier arc from P to Q bulging `side` by height h; via points attracted.
+      const arc = (P: [number, number], Q: [number, number], side: 1 | -1, h: number): [number, number][] => {
+        const cx = (P[0] + Q[0]) / 2 + (side * h * px) / mLon, cy = (P[1] + Q[1]) / 2 + (side * h * py) / 111320;
+        const pts: [number, number][] = [];
+        for (const t of [0.25, 0.5, 0.75]) {
+          const mt = 1 - t;
+          let lon = mt * mt * P[0] + 2 * mt * t * cx + t * t * Q[0];
+          let lat = mt * mt * P[1] + 2 * mt * t * cy + t * t * Q[1];
+          if (data) { const s = data.attract(lon, lat); lon = s[0]; lat = s[1]; }
+          pts.push([lon, lat]);
+        }
+        return pts;
+      };
+
+      // A →(one side)→ F →(other side)→ A: opposite bulges make a loop.
+      const build = async (flip: 1 | -1, h: number): Promise<LoopCand | null> => {
+        const wp: [number, number][] = [A, ...arc(A, F, flip, h), F, ...arc(F, A, (-flip) as 1 | -1, h), A];
+        const res = await fetchRoute(wp, profile);
+        if (!res || res.coords3d.length < 4) return null;
+        const trimmed = removeSmallLoops(trimSpurs(res.coords3d), 300);
+        let dist = 0, asc = 0;
+        for (let i = 1; i < trimmed.length; i++) {
+          dist += hav(trimmed[i - 1]!, trimmed[i]!);
+          const de = (trimmed[i]![2] ?? 0) - (trimmed[i - 1]![2] ?? 0);
+          if (de > 0) asc += de;
+        }
+        const c2 = trimmed.map((c) => [c[0]!, c[1]!]);
+        const cleaned: RouteResult = {
+          geometry: { type: "LineString", coordinates: c2 }, coords3d: trimmed, distanceM: dist, ascentM: asc,
+          durationS: res.distanceM > 0 ? Math.round(res.durationS * (dist / res.distanceM)) : res.durationS,
+        };
+        return {
+          res: cleaned, shape: "circle", heading: 0, size: h, dist, asc, bt: backtrackPct(c2),
+          steps: data ? data.stepHits(c2) : 0, park: data ? data.parkFraction(c2) : 0,
+          crossings: data ? data.crossingHits(c2) : 0, notBuilt: data ? data.notBuiltHits(c2) : 0, poi: data ? data.poiHits(c2) : 0,
+        };
+      };
+
+      // Minimum round trip ≈ 2·d0 (out and back); bulge to reach the target.
+      const extra = Math.max(0, targetM - 2 * d0);
+      const base = Math.max(d0 * 0.15, extra * 0.5);
+      const heights = [base * 0.4, base * 0.8, base * 1.3, base * 2, base * 3].map((x) => Math.max(60, x));
+      const jobs: { flip: 1 | -1; h: number }[] = [];
+      for (const flip of [1, -1] as (1 | -1)[]) for (const h of heights) jobs.push({ flip, h });
+      let done = 0; const total = jobs.length;
+      const results = await mapPool(jobs, 4, (j) => build(j.flip, j.h),
+        () => { statusEl.textContent = `Trying round trips… ${Math.round((100 * ++done) / total)}%`; });
+      const cands = results.filter((c): c is LoopCand => c !== null);
+      if (!cands.length) {
+        statusEl.hidden = true; gpxBtn.hidden = true; result = null; setRoute(null);
+        errorEl.hidden = false; errorEl.textContent = "Couldn't build a round trip via the finish — try another distance.";
+        return;
+      }
+      const score = (c: LoopCand): number => {
+        const gradePerKm = c.asc / Math.max(0.1, c.dist / 1000);
+        const distPen = 100 * (Math.abs(c.dist - targetM) / targetM);
+        const poiBonus = Math.min(c.poi, 10) * 2.5;
+        if (profile === "running")
+          return c.notBuilt * 500 + c.bt + gradePerKm + c.steps * 1.2 + c.crossings * 0.25 - c.park * 30 - poiBonus + distPen;
+        return c.notBuilt * 500 + c.bt * 1.2 + c.crossings * 0.1 - c.park * 20 - poiBonus + distPen;
+      };
+      cands.sort((a, b) => score(a) - score(b));
+      const best = cands[0]!;
+      result = best.res;
+      setRoute({ type: "Feature", geometry: best.res.geometry, properties: {} });
+      const bits = [fmtDistance(best.dist), `↑${Math.round(best.asc)} m`, fmtDuration(best.res.durationS), "round trip via finish"];
+      if (data && profile === "running") bits.push(best.steps === 0 ? "step-free" : `~${best.steps} step pts`);
+      if (data && best.park > 0.05) bits.push(`${Math.round(best.park * 100)}% park`);
+      statusEl.textContent = bits.join(" · ");
+      gpxBtn.hidden = false;
+      const lons = best.res.geometry.coordinates.map((c) => c[0]!);
+      const lats = best.res.geometry.coordinates.map((c) => c[1]!);
+      map.fitBounds([[Math.min(...lons), Math.min(...lats)], [Math.max(...lons), Math.max(...lats)]], { padding: 60, maxZoom: 15 });
+    } finally {
+      loopGo.disabled = false; loopGo.textContent = "Generate loop from start";
+    }
+  }
+
   async function generateLoop() {
     errorEl.hidden = true;
     if (wps.length < 1) {
@@ -271,6 +371,8 @@ export function initRoutePlanner(map: MLMap): RoutePlanner {
       errorEl.textContent = "Set a start point first (right-click → Route: set start).";
       return;
     }
+    // A finish point in loop mode = run there AND back as a round trip.
+    if (wps.length >= 2) { await generateLoopViaFinish(); return; }
     const start: [number, number] = [wps[0]!.lngLat.lng, wps[0]!.lngLat.lat];
     const targetM = Math.max(1, Number(loopDist.value) || 5) * 1000;
     const profile = profileSel.value as RunProfile;

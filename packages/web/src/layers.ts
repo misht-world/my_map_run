@@ -167,6 +167,19 @@ export const overlayLayers: LayerSpecification[] = [
       "line-opacity": 0.95,
     },
   },
+  // Direction-of-travel chevrons along the route (icon drawn in main.ts).
+  {
+    id: "route-arrows", type: "symbol", source: "route",
+    layout: {
+      "symbol-placement": "line",
+      "symbol-spacing": ["interpolate", ["linear"], ["zoom"], 12, 70, 16, 110],
+      "icon-image": "route-arrow",
+      "icon-size": ["interpolate", ["linear"], ["zoom"], 11, 0.75, 16, 1.15],
+      "icon-rotation-alignment": "map",
+      "icon-allow-overlap": true,
+      "icon-ignore-placement": true,
+    },
+  },
 
   // ── Blocked barriers — red ✕ icon (drawn in main.ts), on top ──────────────
   {

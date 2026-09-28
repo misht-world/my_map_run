@@ -10,7 +10,7 @@ import {
   WATER_LAYER_IDS, SHELTER_LAYER_IDS, VIEWPOINT_LAYER_IDS, TOILETS_LAYER_IDS,
   POI_COLOR,
 } from "./layers.js";
-import { makePoiIcon, makeBarrierIcon, type PoiIconKind } from "./icons.js";
+import { makePoiIcon, makeBarrierIcon, makeRouteArrowIcon, type PoiIconKind } from "./icons.js";
 import { parseCoords } from "./search.js";
 import { parseHash, formatHash, type UrlState, type LayerState } from "./url-state.js";
 import { renderPopup } from "./popup.js";
@@ -160,6 +160,9 @@ function addOverlay() {
   }
   if (!map.hasImage("barrier-blocked-icon")) {
     map.addImage("barrier-blocked-icon", makeBarrierIcon().imageData, { pixelRatio: 2 });
+  }
+  if (!map.hasImage("route-arrow")) {
+    map.addImage("route-arrow", makeRouteArrowIcon().imageData, { pixelRatio: 2 });
   }
 
   // Dev/preview: a normalized GeoJSON overlay (single city) instead of PMTiles.
@@ -367,6 +370,12 @@ const ctxMenu = document.getElementById("map-ctx-menu") as HTMLElement;
 let ctxLngLat: maplibregl.LngLat | null = null;
 function showCtxMenu(lngLat: maplibregl.LngLat, x: number, y: number) {
   ctxLngLat = lngLat;
+  // A round-trip loop only has a start — hide via / finish there.
+  const loop = planner.isLoopMode();
+  for (const a of ["via", "end"]) {
+    const b = ctxMenu.querySelector<HTMLElement>(`button[data-action="${a}"]`);
+    if (b) b.hidden = loop;
+  }
   const rect = map.getContainer().getBoundingClientRect();
   ctxMenu.style.left = `${x - rect.left}px`;
   ctxMenu.style.top = `${y - rect.top}px`;

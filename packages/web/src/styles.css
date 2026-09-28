@@ -32,7 +32,8 @@ html, body {
   width: 300px;
   max-height: calc(100vh - 24px);
   overflow-y: auto;
-  padding: 12px 14px;
+  /* no top padding: the sticky header carries it, so it pins flush to the top */
+  padding: 0 14px 12px;
   background: var(--panel-bg);
   border: 1px solid var(--border);
   border-radius: 10px;
@@ -48,6 +49,14 @@ html, body {
   align-items: center;
   justify-content: space-between;
   gap: 8px;
+  /* Stays visible while the panel scrolls (keeps the collapse button reachable). */
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  margin: 0 -14px;
+  padding: 12px 14px 8px;
+  background: #fff;
+  border-radius: 10px 10px 0 0;
 }
 #panel header h1 { font-size: 15px; margin: 0; flex: 1; }
 #panel header .sub { display: block; margin: 2px 0 0; color: var(--muted); font-size: 11px; }
@@ -201,7 +210,36 @@ details.block > .block-body { padding-top: 6px; }
   width: 100%; padding: 4px 6px; margin-top: 2px;
   border: 1px solid var(--border); border-radius: 5px; font: inherit; font-size: 12px; background: #fff;
 }
-#route-loop-dist { max-width: 70px; }
+/* Loop settings: distance on the left, direction compass on the right. */
+.loop-settings {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 2px 0 8px;
+}
+.loop-field { display: flex; flex-direction: column; gap: 5px; }
+.loop-field-label { font-size: 11px; color: var(--muted); }
+.loop-dist-box { display: inline-flex; align-items: center; gap: 6px; }
+#route-loop-dist {
+  width: 68px; padding: 6px 7px; border: 1px solid var(--border); border-radius: 6px;
+  font: inherit; font-size: 14px; font-weight: 600; background: #fff;
+}
+.loop-unit { font-size: 12px; color: var(--muted); }
+/* 8-sector compass, "Auto" in the centre. */
+.compass {
+  display: grid; grid-template-columns: repeat(3, 28px); grid-template-rows: repeat(3, 28px);
+  gap: 2px; padding: 7px; border: 1px solid var(--border); border-radius: 50%;
+  background: radial-gradient(circle, #fff 55%, #f3f7f6 100%);
+}
+.compass button {
+  width: 28px; height: 28px; padding: 0; border: none; border-radius: 50%;
+  background: none; color: #555; font-size: 15px; line-height: 1; cursor: pointer;
+}
+.compass button:hover { background: #e0f2f1; color: var(--accent); }
+.compass button.active { background: var(--accent); color: #fff; }
+.compass .compass-auto { font-size: 9px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.02em; }
+/* Pull the diagonal arrows in so they sit inside the round dial. */
+.compass button[data-dir="315"] { transform: translate(5px, 5px); }
+.compass button[data-dir="45"]  { transform: translate(-5px, 5px); }
+.compass button[data-dir="225"] { transform: translate(5px, -5px); }
+.compass button[data-dir="135"] { transform: translate(-5px, -5px); }
 #route-loop-go {
   width: 100%; padding: 6px; border: 1px solid var(--accent); background: var(--accent);
   color: #fff; border-radius: 5px; cursor: pointer; font: inherit; font-size: 12px; font-weight: 600;
@@ -268,7 +306,7 @@ details.block > .block-body { padding-top: 6px; }
 }
 .route-wp-dot--start { width: 20px; height: 20px; background: #2e7d32; }
 .route-wp-dot--end   { width: 20px; height: 20px; background: #c62828; }
-.route-wp-dot--via   { width: 13px; height: 13px; background: #e65100; border-width: 2px; }
+.route-wp-dot--via   { width: 17px; height: 17px; background: #e65100; border-width: 2px; font-size: 9px; }
 
 /* ── Zoom badge — bottom-left corner, separate from the scale bar ─ */
 .zoom-badge {
@@ -341,13 +379,48 @@ details.block > .block-body { padding-top: 6px; }
   text-align: left; cursor: pointer; font: inherit; color: var(--text); white-space: nowrap;
 }
 .map-ctx-menu button:hover { background: #e0f2f1; color: var(--accent); }
+.map-ctx-menu button[hidden] { display: none; }
+
+/* ── Route-generation progress overlay (centred) ─────────────── */
+
+.route-busy {
+  position: fixed; inset: 0; z-index: 30;
+  display: flex; align-items: center; justify-content: center;
+  pointer-events: none; /* only the box itself is interactive */
+}
+.route-busy[hidden] { display: none; }
+.route-busy-box {
+  pointer-events: auto;
+  display: flex; flex-direction: column; align-items: center; gap: 9px;
+  min-width: 220px; max-width: 80vw; padding: 16px 20px;
+  background: #fff; border: 1px solid var(--border); border-radius: 12px;
+  box-shadow: 0 6px 24px rgba(0,0,0,0.18);
+  font-size: 13px; text-align: center;
+}
+.route-busy-spinner {
+  width: 28px; height: 28px; border-radius: 50%;
+  border: 3px solid #cfe9e6; border-top-color: var(--accent);
+  animation: route-spin 0.8s linear infinite;
+}
+@keyframes route-spin { to { transform: rotate(360deg); } }
+.route-busy-text { font-weight: 600; color: var(--text); }
+.route-busy-bar { width: 100%; height: 5px; border-radius: 3px; background: var(--border); overflow: hidden; }
+#route-busy-fill { height: 100%; width: 0; background: var(--accent); transition: width 0.2s ease; }
+#route-busy-cancel {
+  padding: 5px 18px; border: 1px solid var(--border); background: #fff; border-radius: 6px;
+  cursor: pointer; font: inherit; font-size: 12px;
+}
+#route-busy-cancel:hover { border-color: #c62828; color: #c62828; }
 
 /* ── Mobile ─────────────────────────────────────────────────── */
 
 @media (max-width: 600px) {
   #panel {
-    top: 8px; left: 8px; right: 8px; width: auto; max-height: 50vh; padding: 10px 12px;
+    top: 8px; left: 8px; right: 8px; width: auto; max-height: 50vh; padding: 0 12px 10px;
   }
+  #panel header { margin: 0 -12px; padding: 10px 12px 6px; }
+  #panel.collapsed { padding-bottom: 0; }
+  #panel.collapsed header { border-radius: 10px; }
   #panel-toggle { display: block; }
   #panel.collapsed #panel-body { display: none; }
   .maplibregl-ctrl-top-right { top: 60px; right: 8px; }

@@ -5,6 +5,7 @@
  * and backtracking).
  */
 import { PedNet, type Bbox } from "./pednet.js";
+import { timeoutSignal } from "./routing.js";
 
 const OVERPASS_ENDPOINTS = [
   "https://overpass-api.de/api/interpreter",
@@ -164,12 +165,13 @@ export async function fetchLoopData(bbox: Bbox, signal?: AbortSignal): Promise<L
   };
 
   for (const url of OVERPASS_ENDPOINTS) {
+    if (signal?.aborted) return null;
     try {
       const resp = await fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/x-www-form-urlencoded", "Accept": "application/json" },
         body: "data=" + encodeURIComponent(query),
-        signal: signal ?? AbortSignal.timeout(30000),
+        signal: timeoutSignal(15000, signal), // slow mirror → try the next one sooner
       });
       if (!resp.ok) continue;
       const text = await resp.text();

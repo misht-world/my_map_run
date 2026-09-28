@@ -91,17 +91,26 @@ async function uploadProfile(profile: RunProfile): Promise<string | null> {
   }
 }
 
+/** A timeout signal, optionally also aborted by `signal` (user cancel). */
+export function timeoutSignal(ms: number, signal?: AbortSignal): AbortSignal {
+  const t = AbortSignal.timeout(ms);
+  if (!signal) return t;
+  const any = (AbortSignal as unknown as { any?: (s: AbortSignal[]) => AbortSignal }).any;
+  return any ? any([t, signal]) : signal;
+}
+
 /** Single BRouter route request for a resolved profile id/name. */
-async function routeOnce(lonlats: string, brouterProfile: string): Promise<RouteResult | null> {
+async function routeOnce(lonlats: string, brouterProfile: string, signal?: AbortSignal): Promise<RouteResult | null> {
   const url = `${BROUTER}?lonlats=${lonlats}&profile=${brouterProfile}&alternativeidx=0&format=geojson`;
   let resp: Response;
-  try {
-    resp = await fetch(url, { signal: AbortSignal.timeout(25000) });
-  } catch { return null; }
-  if (!resp.ok) return null;
-  const data = (await resp.json()) as {
+  let data: {
     features?: Array<{ geometry?: { coordinates?: number[][] }; properties?: Record<string, string> }>;
   };
+  try {
+    resp = await fetch(url, { signal: timeoutSignal(25000, signal) });
+    if (!resp.ok) return null;
+    data = await resp.json();
+  } catch { return null; }
   const f = data.features?.[0];
   const coords = f?.geometry?.coordinates;
   if (!coords || coords.length < 2) return null;
@@ -119,24 +128,26 @@ async function routeOnce(lonlats: string, brouterProfile: string): Promise<Route
 export async function fetchRoute(
   waypoints: [number, number][],
   profile: RunProfile,
+  signal?: AbortSignal,
 ): Promise<RouteResult | null> {
-  if (waypoints.length < 2) return null;
+  if (waypoints.length < 2 || signal?.aborted) return null;
   const lonlats = waypoints.map(([lon, lat]) => `${lon.toFixed(6)},${lat.toFixed(6)}`).join("|");
 
   const customId = await uploadProfile(profile);
+  if (signal?.aborted) return null;
   if (customId) {
-    const r = await routeOnce(lonlats, customId);
-    if (r) return r;
+    const r = await routeOnce(lonlats, customId, signal);
+    if (r || signal?.aborted) return r;
     // The server may have evicted the uploaded profile — re-upload once.
     delete uploadedIds[cacheKey(profile)];
     const id2 = await uploadProfile(profile);
     if (id2) {
-      const r2 = await routeOnce(lonlats, id2);
-      if (r2) return r2;
+      const r2 = await routeOnce(lonlats, id2, signal);
+      if (r2 || signal?.aborted) return r2;
     }
   }
   // Last resort: built-in foot profile.
-  return routeOnce(lonlats, PROFILE_FALLBACK[profile]);
+  return routeOnce(lonlats, PROFILE_FALLBACK[profile], signal);
 }
 
 /** Geocode free text (or "lat, lon") → [lon, lat] or null. */

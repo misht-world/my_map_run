@@ -11,6 +11,16 @@
     <div id="map"></div>
     <div id="zoom-badge" class="zoom-badge"></div>
 
+    <!-- Route-generation progress (centred over the map) + cancel -->
+    <div id="route-busy" class="route-busy" hidden role="status" aria-live="polite">
+      <div class="route-busy-box">
+        <div class="route-busy-spinner" aria-hidden="true"></div>
+        <div class="route-busy-text" id="route-busy-text">Working…</div>
+        <div class="route-busy-bar"><div id="route-busy-fill"></div></div>
+        <button id="route-busy-cancel" type="button">Cancel</button>
+      </div>
+    </div>
+
     <!-- Map context menu (right-click / long-press) -->
     <div id="map-ctx-menu" class="map-ctx-menu" hidden>
       <button data-action="start">📍 Route: set start</button>
@@ -36,8 +46,9 @@
           <summary>Route planner</summary>
           <div class="block-body">
             <p class="hint" style="margin-top:0">
-              Right-click the map (long-press on mobile) → set start / via / finish.
-              Drag points to adjust. Or add by place / coordinates below.
+              Right-click the map (long-press on mobile) to set points — a start
+              for a round trip; start, via and finish for A → B. Drag to adjust,
+              or add by place / coordinates below.
             </p>
             <select id="route-profile"></select>
             <select id="route-mode">
@@ -53,25 +64,38 @@
 
             <!-- Round-trip controls -->
             <div id="route-loop-ctl" hidden>
-              <div class="route-loop-row">
-                <label>Distance
-                  <input id="route-loop-dist" type="number" value="10" min="1" max="60" step="0.5" /> km
-                </label>
-                <label>Direction
-                  <select id="route-loop-dir">
-                    <option value="auto">Auto</option>
-                    <option value="0">N</option><option value="45">NE</option>
-                    <option value="90">E</option><option value="135">SE</option>
-                    <option value="180">S</option><option value="225">SW</option>
-                    <option value="270">W</option><option value="315">NW</option>
-                  </select>
-                </label>
+              <div class="loop-settings">
+                <div class="loop-field">
+                  <span class="loop-field-label">Distance</span>
+                  <span class="loop-dist-box">
+                    <input id="route-loop-dist" type="number" value="10" min="1" max="60" step="0.5" />
+                    <span class="loop-unit">km</span>
+                  </span>
+                </div>
+                <div class="loop-field">
+                  <span class="loop-field-label">Direction</span>
+                  <div class="compass" id="route-loop-compass" role="radiogroup" aria-label="Loop direction">
+                    <button type="button" data-dir="315" title="North-west" aria-label="North-west">↖</button>
+                    <button type="button" data-dir="0"   title="North"      aria-label="North">↑</button>
+                    <button type="button" data-dir="45"  title="North-east" aria-label="North-east">↗</button>
+                    <button type="button" data-dir="270" title="West"       aria-label="West">←</button>
+                    <button type="button" data-dir="auto" class="compass-auto active" title="Pick automatically" aria-label="Auto">Auto</button>
+                    <button type="button" data-dir="90"  title="East"       aria-label="East">→</button>
+                    <button type="button" data-dir="225" title="South-west" aria-label="South-west">↙</button>
+                    <button type="button" data-dir="180" title="South"      aria-label="South">↓</button>
+                    <button type="button" data-dir="135" title="South-east" aria-label="South-east">↘</button>
+                  </div>
+                </div>
               </div>
+              <!-- Value holder for the compass (read by the generator). -->
+              <select id="route-loop-dir" hidden>
+                <option value="auto" selected>Auto</option>
+                <option value="0">N</option><option value="45">NE</option>
+                <option value="90">E</option><option value="135">SE</option>
+                <option value="180">S</option><option value="225">SW</option>
+                <option value="270">W</option><option value="315">NW</option>
+              </select>
               <button id="route-loop-go" type="button">Generate loop from start</button>
-              <p class="hint" style="margin:4px 0 0">
-                Just a start → a loop of the given distance. Add a finish too →
-                a round trip out to it and back (Direction is ignored then).
-              </p>
             </div>
 
             <!-- Shape-run (GPS art) controls -->
@@ -121,50 +145,34 @@
             </div>
             <ul id="route-wp-list"></ul>
             <div class="route-btns">
-              <button id="route-clear" type="button" hidden>Clear</button>
-              <button id="route-gpx"   type="button" hidden>Export GPX ↓</button>
+              <button id="route-clear"   type="button" hidden>Clear</button>
+              <button id="route-reverse" type="button" hidden title="Run the loop the other way round">⇄ Reverse</button>
+              <button id="route-gpx"     type="button" hidden>Export GPX ↓</button>
             </div>
             <p id="route-status" class="route-status" hidden></p>
             <p id="route-error"  class="error"        hidden></p>
           </div>
         </details>
 
-        <!-- Layers -->
+        <!-- Layers & legend (checkbox = show/hide, swatch = how it looks) -->
         <details class="block">
-          <summary>Layers</summary>
+          <summary>Layers &amp; legend</summary>
           <div class="block-body">
-            <label><input type="checkbox" id="toggle-norun"    checked /><span class="sw sw-norun"></span> Can't run (foot=no / private / motorway)</label>
-            <label><input type="checkbox" id="toggle-tracks"   checked /><span class="sw sw-track"></span> Running tracks</label>
+            <label><input type="checkbox" id="toggle-norun"    checked /><span class="sw sw-norun"></span> Can't run here (foot=no / private / motorway / not built)</label>
+            <label><input type="checkbox" id="toggle-tracks"   checked /><span class="sw sw-track"></span> Running track</label>
             <label><input type="checkbox" id="toggle-steps"    checked /><span class="sw sw-steps"></span> Steps / stairs</label>
-            <label><input type="checkbox" id="toggle-barriers" checked /><span class="sw sw-blocked"></span> Blocked barriers</label>
-            <label><input type="checkbox" id="toggle-passable"        /><span class="sw sw-passable"></span> Passable barriers</label>
+            <label><input type="checkbox" id="toggle-barriers" checked /><span class="sw sw-blocked"></span> Barrier — no pedestrian access</label>
+            <label><input type="checkbox" id="toggle-passable"        /><span class="sw sw-passable"></span> Passable barrier</label>
             <hr>
             <label><input type="checkbox" id="toggle-water"     checked /><span class="sw sw-poi" data-poi="water"></span> Drinking water</label>
             <label><input type="checkbox" id="toggle-shelter"   checked /><span class="sw sw-poi" data-poi="shelter"></span> Shelter</label>
-            <label><input type="checkbox" id="toggle-viewpoint" checked /><span class="sw sw-poi" data-poi="viewpoint"></span> Viewpoints</label>
+            <label><input type="checkbox" id="toggle-viewpoint" checked /><span class="sw sw-poi" data-poi="viewpoint"></span> Viewpoint</label>
             <label><input type="checkbox" id="toggle-toilets"   checked /><span class="sw sw-poi" data-poi="toilets"></span> Toilets</label>
-          </div>
-        </details>
-
-        <!-- Legend -->
-        <details class="block">
-          <summary>Legend</summary>
-          <div class="block-body">
-            <ul class="legend">
-              <li><span class="sw sw-norun"></span> Can't run here (foot=no / private / motorway)</li>
-              <li><span class="sw sw-track"></span> Running track (leisure=track)</li>
-              <li><span class="sw sw-steps"></span> Steps / stairs</li>
-              <li><span class="sw sw-blocked"></span> Barrier — no pedestrian access</li>
-              <li><span class="sw sw-passable"></span> Passable barrier</li>
-              <li><span class="sw sw-poi" data-poi="water"></span> Drinking water</li>
-              <li><span class="sw sw-poi" data-poi="shelter"></span> Shelter</li>
-              <li><span class="sw sw-poi" data-poi="viewpoint"></span> Viewpoint</li>
-              <li><span class="sw sw-poi" data-poi="toilets"></span> Toilets</li>
-            </ul>
             <p class="hint">
-              The runnable paths themselves are shown by the basemap (try
-              CyclOSM). This overlay only flags where you <em>can't</em> run,
-              plus tracks, steps, barriers and useful points.
+              Runnable paths themselves come from the basemap (try CyclOSM);
+              this overlay flags where you <em>can't</em> run, plus tracks,
+              steps, barriers and useful points. The blue line with ›› chevrons
+              is your planned route and its direction.
             </p>
           </div>
         </details>

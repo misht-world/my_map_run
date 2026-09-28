@@ -114,3 +114,31 @@ export function makeBarrierIcon(color = "#d50000"): { imageData: ImageData; data
 
   return { imageData: ctx.getImageData(0, 0, SIZE, SIZE), dataUrl: c.toDataURL() };
 }
+
+/**
+ * Direction-of-travel chevron for the planned route, pointing +x (right) —
+ * MapLibre rotates line-placed icons so +x follows the line direction.
+ * White chevron with a dark outline so it reads on the blue route line.
+ */
+export function makeRouteArrowIcon(): { imageData: ImageData; dataUrl: string } {
+  const W = 40, H = 40;
+  const c = document.createElement("canvas");
+  c.width = W; c.height = H;
+  const ctx = c.getContext("2d")!;
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+  const chevron = () => {
+    ctx.beginPath();
+    ctx.moveTo(13, 9);
+    ctx.lineTo(26, 20);
+    ctx.lineTo(13, 31);
+    ctx.stroke();
+  };
+  ctx.strokeStyle = "#0d47a1";
+  ctx.lineWidth = 10;
+  chevron();
+  ctx.strokeStyle = "#ffffff";
+  ctx.lineWidth = 5;
+  chevron();
+  return { imageData: ctx.getImageData(0, 0, W, H), dataUrl: c.toDataURL() };
+}

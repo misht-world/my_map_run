@@ -52,6 +52,8 @@ export class LoopData {
     private crossings: PedNet | null = null,
     private notBuilt: PedNet | null = null,
     private pois: PedNet | null = null,
+    private signals: PedNet | null = null,
+    private tracks: PedNet | null = null,
   ) {}
 
   /** Snap toward an interesting POI (viewpoint, spring, cave, water…) if one is
@@ -86,14 +88,42 @@ export class LoopData {
     return n;
   }
 
-  /** Number of route vertices that sit on (≤ `thresh` m from) a crossing node.
-   *  A cluster of these means the route is circling a junction over several
-   *  crossings instead of crossing once. */
-  crossingHits(coords: number[][], thresh = 12): number {
-    if (!this.crossings) return 0;
-    let n = 0;
-    for (const c of coords) if (this.crossings.nearestDist(c[0]!, c[1]!) < thresh) n++;
-    return n;
+  /** Distinct points of `net` the route passes within `thresh` m (each crossing
+   *  / light counted once, however many route vertices sit next to it). */
+  private distinctNear(net: PedNet | null, coords: number[][], thresh: number): number {
+    if (!net) return 0;
+    const mLon = mPerDegLon(this.lat0);
+    const seen = new Set<string>();
+    for (const c of coords) {
+      const p = net.nearest(c[0]!, c[1]!);
+      if (!p) continue;
+      if (Math.hypot((c[0]! - p[0]) * mLon, (c[1]! - p[1]) * M_PER_DEG_LAT) < thresh) seen.add(`${p[0]},${p[1]}`);
+    }
+    return seen.size;
+  }
+
+  /** Uncontrolled / marked road crossings the route uses (no traffic light). */
+  crossingHits(coords: number[][], thresh = 5): number {
+    return this.distinctNear(this.crossings, coords, thresh);
+  }
+
+  /** Traffic lights the route passes (signal-controlled crossings and signal
+   *  nodes on roads) — each one is a potential stop. */
+  signalHits(coords: number[][], thresh = 5): number {
+    return this.distinctNear(this.signals, coords, thresh);
+  }
+
+  /** Metres of the route that run on a running / athletics track. */
+  trackMeters(coords: number[][], thresh = 8): number {
+    if (!this.tracks || coords.length < 2) return 0;
+    const mLon = mPerDegLon(this.lat0);
+    let m = 0;
+    for (let i = 1; i < coords.length; i++) {
+      const a = coords[i - 1]!, b = coords[i]!;
+      const mx = (a[0]! + b[0]!) / 2, my = (a[1]! + b[1]!) / 2;
+      if (this.tracks.nearestDist(mx, my) < thresh) m += Math.hypot((b[0]! - a[0]!) * mLon, (b[1]! - a[1]!) * M_PER_DEG_LAT);
+    }
+    return m;
   }
 
   /** Snap a point to the nearest runnable network vertex (≤ 60 m), else itself. */
@@ -143,6 +173,10 @@ export async function fetchLoopData(bbox: Bbox, signal?: AbortSignal): Promise<L
     `way["natural"="wood"](${b});` +
     `way["highway"~"^(construction|proposed|planned|razed|disused|abandoned)$"](${b});` +
     `node["highway"="crossing"](${b});` +
+    `node["highway"="traffic_signals"](${b});` +
+    // Running / athletics tracks (BRouter doesn't carry leisure/sport tags, so
+    // tracks are rewarded here in candidate scoring instead of in the profile).
+    `way["leisure"="track"]["sport"~"running|athletics"](${b});` +
     // Interesting spots to route past.
     `node["tourism"~"^(viewpoint|attraction|artwork)$"](${b});` +
     `node["natural"~"^(cave_entrance|spring|waterfall|peak|arch|geyser)$"](${b});` +
@@ -182,18 +216,25 @@ export async function fetchLoopData(bbox: Bbox, signal?: AbortSignal): Promise<L
       const stepPts: [number, number][] = [];
       const netPts: [number, number][] = [];
       const crossPts: [number, number][] = [];
+      const signalPts: [number, number][] = [];
+      const trackPts: [number, number][] = [];
       const poiPts: [number, number][] = [];
       const notBuiltPts: [number, number][] = [];
       const parks: Ring[] = [];
       for (const el of json.elements ?? []) {
         if (el.type === "node" && el.lon !== undefined && el.lat !== undefined) {
-          if (el.tags?.["highway"] === "crossing") crossPts.push([el.lon, el.lat]);
+          const t = el.tags ?? {};
+          if (t["highway"] === "traffic_signals" || t["crossing"] === "traffic_signals") signalPts.push([el.lon, el.lat]);
+          else if (t["highway"] === "crossing") crossPts.push([el.lon, el.lat]);
           else poiPts.push([el.lon, el.lat]); // interesting spot
           continue;
         }
         if (el.type !== "way" || !el.geometry || el.geometry.length < 2) continue;
         const hw = el.tags?.["highway"];
-        if (hw && NOTBUILT.has(hw)) {
+        if (el.tags?.["leisure"] === "track") {
+          densify(el.geometry, trackPts);
+          if (hw) densify(el.geometry, netPts); // a routable track is also network
+        } else if (hw && NOTBUILT.has(hw)) {
           densify(el.geometry, notBuiltPts);  // not walkable (don't snap here)
         } else if (hw) {
           densify(el.geometry, netPts);       // runnable network (for snapping)
@@ -208,7 +249,9 @@ export async function fetchLoopData(bbox: Bbox, signal?: AbortSignal): Promise<L
       const crossings = crossPts.length >= 1 ? new PedNet(crossPts, lat0) : null;
       const notBuilt = notBuiltPts.length >= 2 ? new PedNet(notBuiltPts, lat0) : null;
       const pois = poiPts.length >= 1 ? new PedNet(poiPts, lat0) : null;
-      return new LoopData(steps, parks, lat0, network, crossings, notBuilt, pois);
+      const signals = signalPts.length >= 1 ? new PedNet(signalPts, lat0) : null;
+      const tracks = trackPts.length >= 2 ? new PedNet(trackPts, lat0) : null;
+      return new LoopData(steps, parks, lat0, network, crossings, notBuilt, pois, signals, tracks);
     } catch {
       // try next endpoint
     }

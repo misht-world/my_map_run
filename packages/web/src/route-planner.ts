@@ -159,7 +159,7 @@ export function initRoutePlanner(map: MLMap): RoutePlanner {
   const wps: WayPoint[] = [];
   let result: RouteResult | null = null;
   // Padded A→B options (see generatePadded).
-  let paddedAlts: { res: RouteResult; steps: number; park: number }[] = [];
+  let paddedAlts: { res: RouteResult; steps: number; park: number; signals: number; trackM: number; hasData: boolean }[] = [];
   let paddedIdx = 0;
 
   const isLoop = () => modeSel.value === "loop";
@@ -239,6 +239,7 @@ export function initRoutePlanner(map: MLMap): RoutePlanner {
     statusEl.hidden = true;
     errorEl.hidden = false; errorEl.textContent = text;
   }
+  const lightsLabel = (n: number) => (n === 0 ? "no traffic lights" : n === 1 ? "1 traffic light" : `${n} traffic lights`);
   const baseStatus = (res: RouteResult) =>
     `${fmtDistance(res.distanceM)} · ↑${Math.round(res.ascentM)} m · ${fmtDuration(res.durationS)}`;
 
@@ -392,7 +393,7 @@ export function initRoutePlanner(map: MLMap): RoutePlanner {
   // ── Round-trip (loop) generation ────────────────────────────────────────
   interface LoopCand {
     res: RouteResult; shape: LoopShape; heading: number; size: number;
-    dist: number; asc: number; bt: number; steps: number; park: number; crossings: number; notBuilt: number; poi: number;
+    dist: number; asc: number; bt: number; steps: number; park: number; crossings: number; notBuilt: number; poi: number; signals: number; trackM: number;
   }
 
   async function generateLoop() {
@@ -442,6 +443,8 @@ export function initRoutePlanner(map: MLMap): RoutePlanner {
           crossings: data ? data.crossingHits(coords2d) : 0,
           notBuilt: data ? data.notBuiltHits(coords2d) : 0,
           poi: data ? data.poiHits(coords2d) : 0,
+          signals: data ? data.signalHits(coords2d) : 0,
+          trackM: data ? data.trackMeters(coords2d) : 0,
         };
       };
 
@@ -453,9 +456,13 @@ export function initRoutePlanner(map: MLMap): RoutePlanner {
         const distPen = 100 * (Math.abs(c.dist - targetM) / targetM);
         const notBuiltPen = c.notBuilt * 500; // any not-built way (e.g. a proposed bridge) disqualifies
         const poiBonus = Math.min(c.poi, 10) * 2.5; // reward passing interesting spots (capped)
+        const trackBonus = Math.min(c.trackM, 2000) / 100; // ~4 per lap of a 400 m track
+        // Continuity: a traffic light (likely stop) weighs much more than an
+        // uncontrolled crossing; frequent road crossings still add up.
         if (profile === "running")
-          return notBuiltPen + c.bt + gradePerKm + c.steps * 1.2 + c.crossings * 0.25 - c.park * 30 - poiBonus + distPen;
-        return notBuiltPen + c.bt * 1.2 + c.crossings * 0.1 - c.park * 20 - poiBonus + distPen;
+          return notBuiltPen + c.bt + gradePerKm + c.steps * 1.2 + c.signals * 3 + c.crossings * 0.8
+            - c.park * 30 - poiBonus - trackBonus + distPen;
+        return notBuiltPen + c.bt * 1.2 + c.signals + c.crossings * 0.3 - c.park * 20 - poiBonus - trackBonus / 2 + distPen;
       };
 
       const dir = loopDir.value;
@@ -492,6 +499,8 @@ export function initRoutePlanner(map: MLMap): RoutePlanner {
 
       const bits = [baseStatus(best.res)];
       if (data && profile === "running") bits.push(best.steps === 0 ? "step-free" : `~${best.steps} step pts`);
+      if (data) bits.push(lightsLabel(best.signals));
+      if (data && best.trackM > 50) bits.push(`${Math.round(best.trackM)} m on track`);
       if (data && best.park > 0.05) bits.push(`${Math.round(best.park * 100)}% park`);
       showRoute(best.res, bits.join(" · "), true);
     } finally {
@@ -546,6 +555,8 @@ export function initRoutePlanner(map: MLMap): RoutePlanner {
     const bits = [baseStatus(a.res)];
     if (paddedAlts.length > 1) bits.push(`option ${paddedIdx + 1}/${paddedAlts.length}`);
     if (a.steps === 0) bits.push("step-free");
+    if (a.hasData) bits.push(lightsLabel(a.signals));
+    if (a.trackM > 50) bits.push(`${Math.round(a.trackM)} m on track`);
     if (a.park > 0.05) bits.push(`${Math.round(a.park * 100)}% park`);
     showRoute(a.res, bits.join(" · "));
     ptpNext.hidden = paddedAlts.length < 2;
@@ -614,6 +625,8 @@ export function initRoutePlanner(map: MLMap): RoutePlanner {
           steps: data ? data.stepHits(c2) : 0, park: data ? data.parkFraction(c2) : 0,
           crossings: data ? data.crossingHits(c2) : 0, notBuilt: data ? data.notBuiltHits(c2) : 0,
           poi: data ? data.poiHits(c2) : 0,
+          signals: data ? data.signalHits(c2) : 0,
+          trackM: data ? data.trackMeters(c2) : 0,
         };
       };
 
@@ -631,10 +644,10 @@ export function initRoutePlanner(map: MLMap): RoutePlanner {
       const cands = results.filter((c): c is NonNullable<typeof c> => c !== null);
       if (!cands.length) { showError("Couldn't build padded routes here — try another distance."); return; }
       const score = (c: (typeof cands)[number]) =>
-        c.notBuilt * 500 + c.steps * 1.2 + c.crossings * 0.25 + (c.asc / Math.max(0.1, c.dist / 1000)) * 0.5
-        - c.park * 30 - Math.min(c.poi, 10) * 2.5 + 100 * (Math.abs(c.dist - targetM) / targetM);
+        c.notBuilt * 500 + c.steps * 1.2 + c.signals * 3 + c.crossings * 0.8 + (c.asc / Math.max(0.1, c.dist / 1000)) * 0.5
+        - c.park * 30 - Math.min(c.poi, 10) * 2.5 - Math.min(c.trackM, 2000) / 100 + 100 * (Math.abs(c.dist - targetM) / targetM);
       cands.sort((a, b) => score(a) - score(b));
-      paddedAlts = cands.slice(0, 4).map((c) => ({ res: c.res, steps: c.steps, park: c.park }));
+      paddedAlts = cands.slice(0, 4).map((c) => ({ res: c.res, steps: c.steps, park: c.park, signals: c.signals, trackM: c.trackM, hasData: !!data }));
       showPadded(0);
     } finally {
       endJob(signal);

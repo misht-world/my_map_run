@@ -44,6 +44,7 @@ assign   allow_steps              true   # %allow_steps% | Set to false to disal
 assign   steps_cost               2.5    # %steps_cost% | Cost multiplier for steps when allowed (higher = avoid stairs more) | number
 assign   crossing_penalty         40    # %crossing_penalty% | Extra cost (approx. meters) added per traffic-signal crossing node | number
 assign   path_extra               0.0    # %path_extra% | Extra cost on highway=path, to prefer footway over path | number
+assign   service_extra            0.3    # %service_extra% | Extra cost on highway=service, to prefer footway/path over access roads | number
 assign   allow_ferries            true   # %allow_ferries% | set to false to disallow ferries | boolean
 
 assign   use_proposed_cycleroutes false  # %use_proposed_cycleroutes% | Set to true to consider proposed and regular cycleroutes as equals | boolean
@@ -308,7 +309,7 @@ assign rawcostfactor # can be <1.0, is treated later
   else if    highway=cycleway         then ( switch ismuddy 1.4     switch iswet   1.0 1.1 )
   else if    highway=residential|living_street
                                      then  ( switch ismuddy 1.5     switch iswet   1.0 1.1 )
-  else if    highway=service         then  ( switch ismuddy 1.5     switch iswet   1.1 1.2 )
+  else if    highway=service         then  ( add service_extra ( switch ismuddy 1.5     switch iswet   1.1 1.2 ) )
 
   else if    istrack                 then
        ( add ( if highway=path then ( add 1.0 path_extra ) else 1.0 ) add tracktype_penalty add surface_penalty      add wet_penalty        SAC_scale_penalty      )

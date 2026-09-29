@@ -31,7 +31,8 @@ function transform(src) {
       "\n" +
       "assign   steps_cost               6.0    # %steps_cost% | Cost multiplier for steps when allowed (higher = avoid stairs more) | number\n" +
       "assign   crossing_penalty         120    # %crossing_penalty% | Extra cost (approx. meters) added per traffic-signal crossing node | number\n" +
-      "assign   path_extra               0.0    # %path_extra% | Extra cost on highway=path, to prefer footway over path | number"
+      "assign   path_extra               0.0    # %path_extra% | Extra cost on highway=path, to prefer footway over path | number\n" +
+      "assign   service_extra            0.0    # %service_extra% | Extra cost on highway=service, to prefer footway/path over access roads | number"
   );
 
   // 2) Steps: finite, tunable penalty instead of the hard 1.0/3.0 choice, so
@@ -84,6 +85,17 @@ function transform(src) {
     "( add ( if highway=path then ( add 1.0 path_extra ) else 1.0 ) add tracktype_penalty add surface_penalty      add wet_penalty        SAC_scale_penalty      )"
   );
 
+  // 2e) Service roads (driveways, parking aisles, access roads): base cost is
+  //     1.2, cheaper than a path with path_extra — so routes drifted onto them.
+  //     service_extra makes a parallel footway/path win when there is one.
+  const serviceCost =
+    "else if    highway=service         then  ( switch ismuddy 1.5     switch iswet   1.1 1.2 )";
+  if (!s.includes(serviceCost)) throw new Error("service costfactor anchor not found");
+  s = s.replace(
+    serviceCost,
+    "else if    highway=service         then  ( add service_extra ( switch ismuddy 1.5     switch iswet   1.1 1.2 ) )"
+  );
+
   // 3) Node cost: keep the access gate, add a penalty for traffic-signal /
   //    crossing nodes so routes with many light-controlled crossings cost more.
   const nodeInit = "assign initialcost switch or bikeaccess footaccess 0 1000000";
@@ -120,7 +132,8 @@ running = setParam(running, "SAC_scale_limit", "1"); // no mountain scrambling
 running = setParam(running, "SAC_scale_preferred", "0");
 running = setParam(running, "allow_steps", "false"); // default: no stairs at all (UI can allow)
 running = setParam(running, "steps_cost", "14.0"); // used only when stairs are allowed
-running = setParam(running, "crossing_penalty", "20"); // slight dislike of lights, but low enough not to detour around a junction
+running = setParam(running, "crossing_penalty", "40"); // prefer uncontrolled crossings over lights (loop scoring also counts lights)
+running = setParam(running, "service_extra", "0.8"); // service road only when no footway/path alternative
 running = setParam(running, "path_extra", "0.7"); // prefer footway over path (noticeable, not a ban)
 running = setParam(running, "consider_town", "false");
 running = setParam(running, "consider_forest", "true"); // lean to parks / green areas
@@ -138,6 +151,7 @@ trail = setParam(trail, "SAC_scale_limit", "3");
 trail = setParam(trail, "SAC_scale_preferred", "1");
 trail = setParam(trail, "steps_cost", "2.5"); // steps ok, mild preference away
 trail = setParam(trail, "crossing_penalty", "40");
+trail = setParam(trail, "service_extra", "0.3");
 trail = setParam(trail, "consider_forest", "true"); // lean toward green areas
 trail = setParam(trail, "consider_river", "true"); // lean to riverside / lakeside
 trail = setParam(trail, "hiking_routes_preference", "0.5"); // mild pull to marked trail networks

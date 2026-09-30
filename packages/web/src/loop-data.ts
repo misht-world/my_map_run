@@ -88,18 +88,25 @@ export class LoopData {
     return n;
   }
 
-  /** Distinct points of `net` the route passes within `thresh` m (each crossing
-   *  / light counted once, however many route vertices sit next to it). */
-  private distinctNear(net: PedNet | null, coords: number[][], thresh: number): number {
+  /** How many crossings / lights of `net` the route passes (within `thresh` m).
+   *  OSM often splits ONE crossing into several signal nodes (one per lane or
+   *  tram track), so matched nodes closer than `mergeM` count as one. */
+  private distinctNear(net: PedNet | null, coords: number[][], thresh: number, mergeM = 30): number {
     if (!net) return 0;
     const mLon = mPerDegLon(this.lat0);
-    const seen = new Set<string>();
+    const seen = new Map<string, [number, number]>();
     for (const c of coords) {
       const p = net.nearest(c[0]!, c[1]!);
       if (!p) continue;
-      if (Math.hypot((c[0]! - p[0]) * mLon, (c[1]! - p[1]) * M_PER_DEG_LAT) < thresh) seen.add(`${p[0]},${p[1]}`);
+      if (Math.hypot((c[0]! - p[0]) * mLon, (c[1]! - p[1]) * M_PER_DEG_LAT) < thresh) seen.set(`${p[0]},${p[1]}`, p);
     }
-    return seen.size;
+    // Greedy clustering of the matched nodes.
+    const centres: [number, number][] = [];
+    for (const p of seen.values()) {
+      const near = centres.some((q) => Math.hypot((p[0] - q[0]) * mLon, (p[1] - q[1]) * M_PER_DEG_LAT) < mergeM);
+      if (!near) centres.push(p);
+    }
+    return centres.length;
   }
 
   /** Uncontrolled / marked road crossings the route uses (no traffic light). */
@@ -224,7 +231,8 @@ export async function fetchLoopData(bbox: Bbox, signal?: AbortSignal): Promise<L
       for (const el of json.elements ?? []) {
         if (el.type === "node" && el.lon !== undefined && el.lat !== undefined) {
           const t = el.tags ?? {};
-          if (t["highway"] === "traffic_signals" || t["crossing"] === "traffic_signals") signalPts.push([el.lon, el.lat]);
+          // "controlled" is the older tag for a signal-controlled crossing.
+          if (t["highway"] === "traffic_signals" || t["crossing"] === "traffic_signals" || t["crossing"] === "controlled") signalPts.push([el.lon, el.lat]);
           else if (t["highway"] === "crossing") crossPts.push([el.lon, el.lat]);
           else poiPts.push([el.lon, el.lat]); // interesting spot
           continue;

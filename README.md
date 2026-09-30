@@ -1,50 +1,54 @@
 # my_map_run
 
-A free, static web map of **where you can run in Europe** — a bright overlay
-of pedestrian-runnable ways built entirely from OpenStreetMap, plus
-blocked-barrier markers and runner points of interest. No server, no database,
-no manually curated data.
+A free, static web map of **where you can (and can't) run in Europe**, with a
+**running route planner** — loops of a given distance, A→B routes, stairs /
+traffic-light / hill avoidance. Built entirely from OpenStreetMap; no server,
+no database, no manually curated data.
 
-https://misht-world.github.io/my_map_run/ *(after first deploy)*
+https://misht-world.github.io/my_map_run/
 
-- Basemap: [OpenFreeMap](https://openfreemap.org/) (free, keyless).
-- Overlay: our own PMTiles, built from a Geofabrik OSM extract.
+- Basemap: Thunderforest Landscape (default, needs a public key), OpenFreeMap
+  (Bright / Light / Detailed), CyclOSM, Esri satellite.
+- Overlay: our own PMTiles, built monthly from a Geofabrik OSM extract.
+- Routing: [BRouter](https://brouter.de) with our own foot profiles + local
+  OSM data from Overpass for scoring route candidates.
 - Frontend: TypeScript + Vite + MapLibre GL.
 
 Sister project / same architecture: [my_map-toll](https://github.com/misht-world/my_map-toll).
 
-## What works today (MVP)
+## What the map shows
 
-- Interactive map of Europe with a **bright runnable-path overlay**, in two
-  confidence tiers, each toggleable:
-  - **Runnable — pedestrian ways** (bright): footways, paths, tracks,
-    pedestrian streets, and roads with a mapped sidewalk.
-  - **Runnable — quiet roads** (dim): residential/living-street/service/etc.
-    where foot access is not forbidden but no sidewalk is mapped.
-- **Blocked barriers** (gates/stiles/turnstiles tagged `foot=no|private` or
-  with access closed) marked with a **red ✕**. Passable barriers optional.
-- **Steps / stairs** highlighted with a dashed overlay.
-- **Runner POI layers**: 💧 drinking water, ⛺ shelter/gazebo, 👁 viewpoints,
-  🚻 toilets — each toggleable.
-- Per-feature popup: normalized status + lazy-loaded raw OSM tags (Overpass)
-  + link to openstreetmap.org.
-- Coordinate search, URL state (`#map=…&layers=…`), shareable link, cursor
-  readout, right-click to copy coordinates.
+The basemap already draws walkable paths, so the overlay only adds what a
+runner needs *on top*:
 
-## Not in the MVP (planned — see docs/ROADMAP.md)
+- **Can't run here** — red dashed: `foot=no|private|use_sidepath`,
+  `access=no|private|customers` (no foot override), motorways/trunks, and
+  not-built ways (`highway=construction|proposed|…`).
+- **Running tracks** (`leisure=track` + `sport=running|athletics`).
+- **Steps / stairs** (dashed black).
+- **Barriers** — blocked (red ✕) and, optionally, passable.
+- **Runner POI** — drinking water (blue), shelter, viewpoint, toilets.
+- Per-feature popup with the normalized status + lazily loaded raw OSM tags.
 
-- **Route building** (point-to-point and round-trip with a target distance,
-  draggable waypoints) via **BRouter**, with runner options:
-  *avoid stairs* and *avoid steep slopes*. Engine seam: `@mmr/routing-adapter`.
-- **Your own activity tracks** as a blue overlay (GPX/FIT import). A global
-  third-party heatmap (e.g. Strava) cannot be embedded for free/legally —
-  see [`docs/LIMITATIONS.md`](docs/LIMITATIONS.md).
+One **Layers & legend** block toggles each of these and shows how they look.
 
-## Classification rules
+## Route planner
 
-How OSM tags become runnable tiers / barriers / POI is documented in
-[`docs/TAG_INTERPRETATION.md`](docs/TAG_INTERPRETATION.md) and unit-tested in
-`packages/interpreter/test/`.
+Full details: [`docs/ROUTING.md`](docs/ROUTING.md).
+
+- **Profiles:** 🏃 *Running* (sidewalks/footways, no stairs by default, few
+  traffic lights, flat, straight) and ⛰ *Trail* (paths, hills, stairs OK).
+  *Allow stairs* checkbox for Running.
+- **Round trip (loop):** set a start, a distance and a direction (8-sector
+  compass or *Auto*) → the planner tries circle / oval / teardrop shapes in
+  several headings and picks the best by stairs, climb, traffic lights, road
+  crossings, backtracking, parks, running tracks and interesting spots.
+  **⇄ Reverse** runs it the other way round.
+- **Point A → B:** start, numbered vias, finish; auto-routes as you edit.
+  Optional **target distance** pads the route with detours and offers several
+  alternatives (*Other option ↻*).
+- Direction chevrons on the route, centred progress overlay with **Cancel**,
+  **GPX export** (with elevation).
 
 ## Run locally
 
@@ -54,61 +58,71 @@ npm test              # interpreter unit tests
 npm run dev           # dev server at http://localhost:5173
 ```
 
-Without a PMTiles overlay the map still loads (empty overlay). To see data,
-build a small extract and point the app at it:
+The overlay needs data. Quickest: build a single-city GeoJSON preview straight
+from Overpass (same interpreter as the real tiles):
 
 ```bash
-# Build one small country locally (fast):
-GEOFABRIK_URL=https://download.geofabrik.de/europe/monaco-latest.osm.pbf npm run data:build
+npx tsx scripts/local-geojson.ts 47.49 19.02 47.54 19.10 packages/web/public/budapest-run.geojson
+VITE_GEOJSON_URL=http://localhost:5173/budapest-run.geojson npm run dev
+```
 
-# Serve the tiles and run the app against them:
-npx pmtiles serve data --port 8080 &      # serves europe-run.pmtiles
+Or build real tiles for a small country:
+
+```bash
+GEOFABRIK_URL=https://download.geofabrik.de/europe/monaco-latest.osm.pbf npm run data:build
+npx pmtiles serve data --port 8080 &
 VITE_PMTILES_URL=http://localhost:8080/europe-run.pmtiles npm run dev
 ```
 
-## Automated builds (recommended)
+Routing works locally without any data build — it calls the public BRouter
+and Overpass servers from the browser.
 
-Both the data pipeline and the website are built by GitHub Actions — your PC
-is not involved.
+After changing a routing profile, regenerate it: `node packages/web/profiles/build-profiles.mjs`
+(see [`docs/ROUTING.md`](docs/ROUTING.md#profiles)).
 
-- **`.github/workflows/data.yml`** — rebuilds the Europe PMTiles overlay
-  monthly (and on manual trigger). The complete tileset (~GBs, kept without
-  dropping) is uploaded to **Cloudflare R2** — it is far over GitHub's 2 GB
-  release-asset limit; only the tiny coverage outline goes to a GitHub Release.
-  One-time R2 setup: [`docs/HOSTING.md`](docs/HOSTING.md).
-- **`.github/workflows/pages.yml`** — rebuilds the static website on every
-  push to `main` and after a successful data build, deploys to GitHub Pages.
+## Automated builds
 
-One-time repo setup:
+Both the data pipeline and the website are built by GitHub Actions.
 
-1. **Settings → Pages → Source**: *GitHub Actions*.
-2. **Actions → Build data tiles → Run workflow** once to produce the first
-   PMTiles release (~40–90 min for all of Europe).
+- **`.github/workflows/data.yml`** — rebuilds the Europe overlay monthly
+  (1st of the month) and on manual trigger; publishes `europe-run.pmtiles` +
+  `europe-extent.geojson` to a GitHub Release `data-YYYY-MM-DD`. The overlay is
+  small (only exceptions are drawn), well under the 2 GB asset limit.
+- **`.github/workflows/pages.yml`** — rebuilds the site on every push to
+  `main` and after a successful data build, copies the latest release assets
+  next to the site and deploys to GitHub Pages (tiles served same-origin).
 
-## Manual data build (optional)
+Hosting details and one-time setup: [`docs/HOSTING.md`](docs/HOSTING.md).
 
-Prerequisites: [osmium-tool](https://osmcode.org/osmium-tool/),
-[tippecanoe](https://github.com/felt/tippecanoe),
-[go-pmtiles](https://github.com/protomaps/go-pmtiles),
-[gh](https://cli.github.com/), Node 20+.
-
-```bash
-npm run data:build     # fetch → filter → normalize → tile
-npm run data:publish   # gh release upload
-```
+Manual alternative (needs osmium, tippecanoe, go-pmtiles, authenticated `gh`):
+`npm run data:build && npm run data:publish`.
 
 ## Project layout
 
 ```
 packages/
-  model/            # Types: FootTier, BarrierStatus, PoiKind, TileProperties.
-  interpreter/      # Pure OSM-tag → runnable/barrier/POI. Unit-tested.
-  tile-builder/     # Node stream that enriches GeoJSON before tippecanoe.
-  web/              # MapLibre + PMTiles + OpenFreeMap.
-  routing-adapter/  # Stub for the future BRouter integration.
-scripts/            # Shell scripts for the data pipeline.
-docs/               # Architecture, tag rules, routing plan, limitations, roadmap.
+  model/            # Types: TileProperties, NoRunResult, BarrierResult, PoiKind.
+  interpreter/      # Pure OSM-tag → no-run / track / barrier / POI. Unit-tested.
+  tile-builder/     # normalize.ts: enriches osmium GeoJSONSeq before tippecanoe.
+  web/              # MapLibre app + route planner.
+    profiles/       #   BRouter foot profiles (generated) + their generator.
+    src/            #   routing, loop generation, local OSM data, UI.
+  routing-adapter/  # Unused stub from the MVP (real routing lives in web/).
+scripts/            # Data pipeline shell scripts + local-geojson preview.
+docs/               # Architecture, tag rules, routing, hosting, limits, roadmap.
+gpx/                # (git-ignored) personal tracks shared for debugging routes.
 ```
+
+## Documentation
+
+| Doc | What's in it |
+|---|---|
+| [`ARCHITECTURE.md`](docs/ARCHITECTURE.md) | Layers, packages, tile schema, web modules |
+| [`TAG_INTERPRETATION.md`](docs/TAG_INTERPRETATION.md) | How OSM tags become overlay features |
+| [`ROUTING.md`](docs/ROUTING.md) | BRouter profiles, loop / A→B generation, scoring, gotchas |
+| [`HOSTING.md`](docs/HOSTING.md) | Data releases, Pages deploy, keys |
+| [`LIMITATIONS.md`](docs/LIMITATIONS.md) | Data and engine limits |
+| [`ROADMAP.md`](docs/ROADMAP.md) | Done / next |
 
 ## License
 

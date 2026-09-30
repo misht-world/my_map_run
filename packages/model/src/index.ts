@@ -5,8 +5,8 @@
  *   - Raw OSM tags remain the source of truth (kept out of tiles, fetched
  *     lazily from Overpass on popup click).
  *   - Normalized statuses drive rendering and stay cheap to embed in tiles.
- *   - The model is prepared "to grow": a future routing engine reads the
- *     same normalized `foot_tier` / `is_steps` fields (see docs/ROUTING.md).
+ *   - Tiles carry only the exceptions a runner needs (can't-run ways, tracks,
+ *     steps, barriers, POI); routing is done in the browser (docs/ROUTING.md).
  */
 
 // ---------------------------------------------------------------------------
@@ -14,9 +14,10 @@
 //
 // We do NOT draw the runnable network any more — the basemap shows walkable
 // paths. We only overlay the ways you CANNOT run on, as a warning (red
-// dashed): foot=no|private|use_sidepath, access=no|private|customers, or a
-// motorway/trunk. `foot=yes|designated|permissive` overrides. Runnable ways
-// are simply not emitted; routing (later) picks the actual route.
+// dashed): not-built ways (construction/proposed/…), foot=no|private|
+// use_sidepath, access=no|private|customers, or a motorway/trunk.
+// `foot=yes|designated|permissive` overrides (except for not-built ways).
+// Runnable ways are simply not emitted; the route planner picks the route.
 // ---------------------------------------------------------------------------
 
 export interface NoRunResult {

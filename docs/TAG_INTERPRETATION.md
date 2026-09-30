@@ -1,84 +1,71 @@
 # Tag interpretation
 
-How OSM tags become the normalized fields embedded in tiles. The logic lives
-in `packages/interpreter/src/` and is unit-tested in
-`packages/interpreter/test/`. Confidence tiers (rather than a single
-yes/no) let the user trade coverage against certainty via layer toggles —
-the same "explicit vs ambiguous" idea used in `my_map-toll`.
+How OSM tags become the features in the overlay tiles. The logic lives in
+`packages/interpreter/src/`, is unit-tested in `packages/interpreter/test/`
+(`npm test`), and is applied by `packages/tile-builder/src/normalize.ts`
+(and by `scripts/local-geojson.ts` for the city preview).
 
-## Runnable ways — `interpretFoot`
+**Policy (inverted):** the basemap already shows walkable paths, so runnable
+ways are *not* emitted. Lines are emitted only for running tracks, steps, and
+ways you **can't** run on. Points are emitted for barriers and runner POI.
 
-Applied to `highway=*` ways. Produces `{ tier, is_steps, reason }`, where
-`tier` is `designated`, `allowed`, or `null` (drop the way).
+For each line-like feature `normalize.ts` checks, in order:
 
-Priority order (first match wins):
+1. `interpretTrack` → `is_track` (orange line),
+2. else `interpretNoRun` blocked → `blocked` (red dashed; `is_steps` kept),
+3. else `highway=steps` → `is_steps` (black dashes),
+4. else dropped.
 
-1. **Drop** — no `highway`, or a not-built/decommissioned value
-   (`construction`, `proposed`, `abandoned`, `razed`, `disused`, `no`).
-1a. **Drop** — `indoor=yes` and `conveying=*` (moving walkways / escalators):
-   excluded from display and routing. **Exception:** corridors
-   (`highway=corridor` or `indoor=corridor`) are kept as `designated` — they
-   are useful running connections through buildings/stations.
-2. **Drop** — `foot=no|private|use_sidepath` (a hard foot ban overrides all).
-3. `highway=motorway|trunk` (+`_link`) → **drop** (no pedestrians), unless
-   `foot=yes|designated|permissive` (rare) → `allowed`.
-4. `access=no|private` **and** no `foot=yes|designated|permissive` → **drop**.
-5. **`designated`** if any of:
-   - `foot=yes|designated|permissive`, or
-   - `highway ∈ {footway, path, pedestrian, steps, track, bridleway,
-     corridor, via_ferrata}`, or
-   - a mapped sidewalk (`sidewalk=yes|both|left|right` or
-     `sidewalk:left|right|both` ≠ `no|none|separate`).
-6. **`allowed`** if `highway ∈ {residential, living_street, service,
-   unclassified, tertiary, tertiary_link, road, cycleway}`.
-7. Otherwise **drop** — notably `primary`/`secondary` (and links) **without**
-   a mapped sidewalk: busy roads a runner should avoid.
+`area=yes` adds `is_area`. For points: `interpretBarrier` first, then
+`interpretPoi`.
 
-`is_steps = highway === "steps"` — carried into tiles for a dashed render and,
-later, an "avoid stairs" routing profile.
+## Can't run here — `interpretNoRun`
 
-### Running tracks — `interpretTrack`
+Applied to `highway=*` ways; returns `{ blocked, reason }`. First match wins:
 
-`leisure=track` (the "core" of a running map — athletics ovals, park running
-loops) is detected independently of `highway` and flagged `is_track`, rendered
-as a bold distinct line on top. Excluded only for clearly non-running sports
-(`sport=motor|karting|cycling|bmx|horse_racing|ice_skating|…`); `running`,
-`athletics`, `multi`, or no `sport` all qualify.
+1. No `highway` → not blocked.
+2. `highway=service` with `service=driveway|parking_aisle|alley|drive-through`
+   → never emitted.
+3. **Not built:** `highway=construction|proposed|disused|abandoned|razed|planned`
+   → blocked (`CONSTRUCTION`), **even with `foot=designated`** — on a
+   construction way that's the planned state, not walkable today.
+4. `foot=yes|designated|permissive` → not blocked (overrides the rest).
+5. `foot=no|private|use_sidepath` → blocked (`FOOT_FORBIDDEN`).
+6. `access=no|private|customers` → blocked (`ACCESS_FORBIDDEN`).
+7. `highway=motorway|motorway_link|trunk|trunk_link` → blocked (`MOTORWAY`).
+8. Otherwise not blocked.
 
-### Areas — `is_area`
+The routing profiles mirror this as their `norun` gate (see
+[`ROUTING.md`](ROUTING.md)) — except that BRouter only knows
+`construction|proposed|abandoned` among the not-built values.
 
-`area=yes` ways and Polygon/MultiPolygon features are kept but rendered as a
-**thin white outline** (their outer ring), not a filled bright line — so
-pedestrian squares read as "open space you can cross" without dominating.
+## Running tracks — `interpretTrack`
 
-### Notes / known trade-offs
-
-- Sidewalk tagging is sparse. A busy road with an unmapped sidewalk is
-  dropped (false negative) rather than drawn as if runnable (false positive)
-  — the `allowed` tier + toggle is the release valve for quieter roads.
-- `cycleway` is placed in `allowed` (foot rules vary by country); a cycleway
-  explicitly `foot=designated|yes` is promoted to `designated`.
+`leisure=track` **and** `sport` containing `running` or `athletics`
+(`;`/`,`-separated lists allowed). Without an explicit running sport,
+`leisure=track` also covers ski slopes, horse/cycle/motor tracks, so those are
+not shown. Tracks are routable only if they also carry a `highway` tag; the
+route planner rewards metres run on them (BRouter itself doesn't see `leisure`).
 
 ## Barriers — `interpretBarrier`
 
-Applied to nodes. Produces `{ status, reason }` or `null`.
+Applied to nodes; returns `{ status, reason }` or `null`.
 
-- **Skipped entirely** (no marker, even with `foot=no`/`access=private`): any
-  node with a `door=*` tag (building door) or an `entrance=*` tag (building /
-  home entrance, e.g. `barrier=gate` + `entrance=home`). A running route does
-  not pass through house doors.
-- Tracked barrier types: `gate, stile, kissing_gate, turnstile,
-  full-height_turnstile, cattle_grid, bollard, block, chain, lift_gate,
-  swing_gate, hampshire_gate, wicket_gate, sally_port, hedge, fence, wall,
-  sliding_gate, log, debris`. (`kerb` is intentionally excluded — too common.)
-- **`blocked`** (red ✕) — `foot=no|private`, or `access=no|private` without a
-  `foot=yes|designated|permissive` override. Also emitted for a standalone
-  `access=no|private` / `foot=no|private` node even without a `barrier` tag.
-- **`passable`** — a tracked barrier a pedestrian can pass. Off by default.
+- **Skipped entirely:** any node with `door=*` or `entrance=*` (building /
+  home entrances, e.g. `barrier=gate` + `entrance=home`), and `indoor=yes`.
+- Tracked types: `gate, stile, kissing_gate, turnstile, full-height_turnstile,
+  cattle_grid, bollard, block, chain, lift_gate, swing_gate, hampshire_gate,
+  wicket_gate, sally_port, hedge, fence, wall, sliding_gate, log, debris`
+  (`kerb` intentionally excluded — too common).
+- **`blocked`** (red ✕): `foot=no|private`, or `access=no|private|customers`
+  without a `foot=yes|designated|permissive` override. Also for a standalone
+  access/foot-ban node without a `barrier` tag.
+- **`passable`**: any other tracked barrier. Hidden by default.
 
 ## Runner POI — `interpretPoi`
 
-Applied to nodes. First match wins (water is most useful mid-run):
+Applied to nodes; `indoor=yes` is skipped. First match wins (water is most
+useful mid-run):
 
 | `poi_kind` | matched tags |
 |---|---|
@@ -86,3 +73,9 @@ Applied to nodes. First match wins (water is most useful mid-run):
 | `shelter` | `amenity=shelter`; any `shelter_type=*`; `tourism=picnic_site` |
 | `viewpoint` | `tourism=viewpoint` |
 | `toilets` | `amenity=toilets` |
+
+## Pipeline filter
+
+`scripts/02-filter.sh` keeps `w/highway`, `w|r/leisure=track`, barrier nodes,
+`access`/`foot` ban nodes and the POI node tags above; everything else is
+dropped before normalization.

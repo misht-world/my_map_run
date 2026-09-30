@@ -1,72 +1,52 @@
-# Hosting the overlay tiles (Cloudflare R2)
+# Hosting
 
-The European runnable overlay is the whole pedestrian network — ~94 million
-features / ~6.8 GB of geometry. Kept complete (no density dropping), the
-PMTiles file is a few GB, which **exceeds GitHub's 2 GB release-asset limit**.
-PMTiles is designed to be served straight from object storage over HTTP range
-requests, so we host the file on **Cloudflare R2** (free tier: 10 GB storage,
-no egress fees). The site stays 100% static — R2 is just storage, no server.
+Everything is served from **GitHub**: the overlay tiles are a GitHub Release
+asset, copied into the GitHub Pages site at deploy time and served from the
+same origin (no CORS / redirect issues with PMTiles range requests).
 
-A hard size guard in the build (`R2_MAX_BYTES`, default 9 GB) aborts the upload
-if the file would ever approach the free-tier limit.
+> History: while the MVP drew the whole pedestrian network the tileset was
+> ~14 GB and was moved to Cloudflare R2. After the inverted-overlay change
+> (only *can't-run* ways, tracks, steps, barriers, POI) it fits a GitHub
+> Release again, and R2 is no longer used.
+
+## Data release (`.github/workflows/data.yml`)
+
+- Runs on the 1st of every month (04:23 UTC) and on manual trigger.
+- Downloads `europe-latest.osm.pbf` from Geofabrik (curl retries on transient
+  5xx), filters with osmium, normalizes, builds `europe-run.pmtiles` with
+  tippecanoe, and converts Geofabrik's `europe.poly` into
+  `europe-extent.geojson` (the dashed coverage outline).
+- Publishes both files to a Release tagged **`data-YYYY-MM-DD`**.
+- Manual inputs for test builds: `geofabrik_url` (e.g. a single country) and
+  `out_name` (anything other than `europe-run.pmtiles` skips publishing).
+
+## Site deploy (`.github/workflows/pages.yml`)
+
+- Runs on every push to `main`, manually, and after a successful data build.
+- Runs `npm test`, builds the site with:
+  - `VITE_BASE=/my_map_run/`
+  - `VITE_PMTILES_URL=/my_map_run/europe-run.pmtiles` and
+    `VITE_EXTENT_URL=/my_map_run/europe-extent.geojson` (same origin)
+  - `VITE_DATA_DATE` = latest release tag, `VITE_BUILD_DATE` = today
+  - `VITE_THUNDERFOREST_KEY` from the repo **variable** `THUNDERFOREST_KEY`
+- Downloads the latest release's `europe-run.pmtiles` + `europe-extent.geojson`
+  into `dist/` and deploys to GitHub Pages.
 
 ## One-time setup
 
-1. **Create a Cloudflare account** (free) and an **R2 bucket**, e.g. `my-map-run`.
-2. **Enable public access** for the bucket:
-   - R2 → your bucket → *Settings* → *Public access* → enable the **r2.dev**
-     subdomain. You get a base URL like `https://pub-XXXXXXXX.r2.dev`.
-   - (Optional, better for production: connect a custom domain via Cloudflare.)
-3. **Set the bucket CORS policy** (R2 → bucket → *Settings* → *CORS policy*):
-   ```json
-   [
-     {
-       "AllowedOrigins": ["https://misht-world.github.io"],
-       "AllowedMethods": ["GET", "HEAD"],
-       "AllowedHeaders": ["range", "if-match"],
-       "ExposeHeaders": ["content-range", "content-length", "accept-ranges", "etag"],
-       "MaxAgeSeconds": 3600
-     }
-   ]
-   ```
-   (Add `http://localhost:5173` to `AllowedOrigins` if you want to test the R2
-   tiles from the local dev server.)
-4. **Create an R2 API token** (R2 → *Manage R2 API Tokens* → *Create*) with
-   **Object Read & Write** permission on the bucket. Note the **Access Key ID**,
-   **Secret Access Key**, and your **Account ID**.
-5. **Add GitHub repository secrets** (Settings → Secrets and variables → Actions):
-   | Secret | Value |
-   |---|---|
-   | `R2_ACCOUNT_ID` | Cloudflare account ID |
-   | `R2_ACCESS_KEY_ID` | R2 token access key ID |
-   | `R2_SECRET_ACCESS_KEY` | R2 token secret |
-   | `R2_BUCKET` | bucket name, e.g. `my-map-run` |
-   | `R2_PUBLIC_BASE` | public base URL, e.g. `https://pub-XXXXXXXX.r2.dev` |
+1. **Settings → Pages → Source:** *GitHub Actions*.
+2. **Settings → Secrets and variables → Actions → Variables:** add
+   `THUNDERFOREST_KEY` (public key for the Landscape basemap; without it the
+   site falls back to OpenFreeMap Bright and hides the Landscape option).
+3. **Actions → Build data tiles → Run workflow** once to create the first
+   data release (Europe takes a while; a single country is quick).
 
-   Optionally set repository **variable** `R2_MAX_BYTES` to change the size cap.
+## External services used at runtime (all public)
 
-## After setup
-
-- **Actions → Build data tiles → Run workflow** rebuilds the tileset, guards
-  its size, uploads `europe-run.pmtiles` to R2, and publishes only the tiny
-  `europe-extent.geojson` to a GitHub Release (date marker + coverage outline).
-- The **Deploy site** workflow bakes `VITE_PMTILES_URL = <R2_PUBLIC_BASE>/europe-run.pmtiles`
-  into the site. The browser loads tiles from R2 by range request.
-
-## Verifying
-
-```bash
-# File present + range support:
-curl -sI "$R2_PUBLIC_BASE/europe-run.pmtiles" | grep -iE 'content-length|accept-ranges'
-```
-Then open the site and confirm (browser devtools): requests to the R2 URL
-return **206 Partial Content**, there are **no CORS errors**, and the pedestrian
-network is dense at city zoom.
-
-## Cost / limits
-
-R2 free tier: 10 GB storage, 10M Class-B (read) ops/month, **no egress fees**.
-A multi-GB tileset and personal browsing stay comfortably within it. If storage
-ever gets tight, lower `--maximum-zoom` in the tile build (`.github/workflows/data.yml`)
-or raise the per-feature `tileMinZoom` thresholds in
-`packages/tile-builder/src/normalize.ts`.
+| Service | Used for |
+|---|---|
+| GitHub Pages | site + tiles |
+| OpenFreeMap, CyclOSM, Esri, Thunderforest | basemaps |
+| brouter.de | routing (profile upload + route) |
+| Overpass (3 mirrors) | local data for route scoring; raw tags in popups |
+| Nominatim | place search in the route planner |

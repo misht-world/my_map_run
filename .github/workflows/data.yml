@@ -12,7 +12,7 @@ on:
         required: false
         default: ""
       out_name:
-        description: "R2 object name for the tiles (use e.g. test-run.pmtiles to not touch prod)"
+        description: "Output name for the tiles; anything other than europe-run.pmtiles is a test build and is not published"
         required: false
         default: "europe-run.pmtiles"
   schedule:
@@ -140,12 +140,8 @@ jobs:
           # --no-feature-limit (the 200k-features/tile cap). With only the byte
           # cap off, dense city tiles still blew past the feature cap and
           # tippecanoe raised a global drop rate that nuked ~99.9% of features
-          # even at maxzoom. The full tileset is hosted on Cloudflare R2 (see
-          # docs/HOSTING.md), not a 2 GB GitHub release asset.
-          # maxzoom z12 (browser overzooms for close-up) keeps the file inside
-          # R2's free 10 GB tier; low zooms stay small via per-feature
-          # tippecanoe.minzoom (normalize.ts). The size guard below aborts the
-          # upload if the file ever approaches the cap.
+          # even at maxzoom. The inverted overlay is small and is published to
+          # a GitHub Release below (docs/HOSTING.md).
           # No --simplification override: the 10x value collapsed short
           # footway segments to zero length at z12 and tippecanoe dropped them
           # as degenerate — that (not the size/feature caps) was flattening the
@@ -156,7 +152,7 @@ jobs:
           # lines keep all their points (much smoother). --no-tile-size-limit +
           # --no-feature-limit keep every feature in the densest city tiles.
           # (Per-feature tippecanoe.minzoom was removed from normalize.ts — it
-          # was the bug that dropped ~99.9% of features.) Full tileset → R2.
+          # was the bug that dropped ~99.9% of features.)
           # --full-detail=16: z12 tiles carry very fine coordinate resolution
           # (~0.1 m) so lines stay smooth when the browser overzooms, without
           # extra zoom levels. Cheap now that only z12 is stored.

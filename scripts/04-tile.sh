@@ -26,13 +26,12 @@ osmium export "$IN" -f geojsonseq --add-unique-id=type_id --overwrite \
 
 echo "[tile] tippecanoe → mbtiles"
 # Layer name 'run' is referenced by the web style (packages/web/src/layers.ts).
-# The runnable network needs higher zoom than the toll map: -Z6 -z14.
-# Keep EVERY feature — no dropping. BOTH --no-tile-size-limit AND
-# --no-feature-limit are required: with only the byte cap off, dense city
-# tiles still hit the 200k-features/tile cap and tippecanoe drops globally.
-# The full tileset is hosted on Cloudflare R2 (docs/HOSTING.md), not GitHub.
-# maxzoom z12 keeps it inside R2's free tier; per-feature minzoom (normalize.ts)
-# keeps low zooms small. Browser overzooms for close-up detail.
+# Tiles only at z12 (the browser overzooms); --full-detail=16 keeps lines
+# smooth. Keep EVERY feature: BOTH --no-tile-size-limit AND --no-feature-limit
+# are required, otherwise dense city tiles trigger global dropping. Do NOT add
+# per-feature tippecanoe.minzoom in normalize.ts (it dropped ~99.9% of
+# features). The (inverted, small) overlay is published to a GitHub Release —
+# docs/HOSTING.md.
 tippecanoe \
   --force \
   --layer=run \

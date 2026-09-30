@@ -5,11 +5,12 @@
  * Input (stdin):  one GeoJSON Feature per line, properties = raw OSM tags,
  *                 plus osmium-injected `@id` / Feature.id ("w123"/"n123"/"r123").
  * Output (stdout): one GeoJSON Feature per line with normalized TileProperties:
- *                  { osm_type, osm_id, kind, foot_tier?, is_steps?,
- *                    barrier_status?, barrier_kind?, poi_kind?, name? }
+ *                  { osm_type, osm_id, kind, blocked?, is_track?, is_steps?,
+ *                    is_area?, barrier_status?, barrier_kind?, poi_kind?, name? }
  *
- * Three feature families are emitted:
- *   - line    : runnable ways (LineString/MultiLineString) → foot_tier
+ * Three feature families are emitted (inverted policy — runnable ways are
+ * NOT emitted, the basemap shows them; see docs/TAG_INTERPRETATION.md):
+ *   - line    : running tracks, can't-run ways (blocked), steps
  *   - barrier : gate/stile/… nodes (Point)                → barrier_status
  *   - poi     : water/shelter/viewpoint/toilets nodes (Point)
  *

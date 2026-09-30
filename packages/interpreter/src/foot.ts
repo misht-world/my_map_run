@@ -24,13 +24,17 @@ const footAllows = (foot: string | undefined): boolean =>
  * Policy (inverted): we no longer draw the whole runnable network — the
  * basemap shows walkable paths. Instead we overlay only the ways you
  * **cannot** run on, as a warning (red dashed). Everything runnable is
- * simply not emitted. Routing (later) decides the actual route.
+ * simply not emitted; the route planner decides where to run (its BRouter
+ * profiles mirror this as their `norun` gate — docs/ROUTING.md).
  *
  * Returns `{ blocked: true }` for a way a runner cannot use:
+ *   - not built: highway = construction / proposed / disused / abandoned /
+ *     razed / planned (even with foot=designated), or
  *   - foot = no / private / use_sidepath, or
  *   - access = no / private / customers (without a foot override), or
  *   - a motorway / trunk (+links).
- * `foot = yes|designated|permissive` overrides everything → not blocked.
+ * `foot = yes|designated|permissive` overrides the foot/access/motorway rules
+ * (not the not-built one) → not blocked.
  * Driveways / parking aisles / alleys are never emitted.
  */
 export function interpretNoRun(tags: OsmTags): NoRunResult {

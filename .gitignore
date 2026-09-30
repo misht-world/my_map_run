@@ -24,3 +24,6 @@ packages/web/public/*.geojson
 
 # Claude Code local settings
 .claude/
+
+# Personal GPX tracks shared for debugging routes (not part of the project)
+gpx/

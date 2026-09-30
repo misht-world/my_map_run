@@ -1,33 +1,40 @@
 # Roadmap
 
-## Phase 1 — Runnable map overlay (the MVP) ✅
+## Phase 1 — Overlay ✅
 
-Bright runnable-path overlay in two confidence tiers, blocked-barrier ✕,
-steps highlighting, runner POI (water / shelter / viewpoint / toilets),
-popups, coordinate search, URL state, monthly auto-rebuild + Pages deploy.
+Inverted overlay (*can't run* ways, running tracks, steps, blocked/passable
+barriers, runner POI), popups with lazy raw tags, coordinate search, URL
+state, share link, basemap switcher (Landscape / OpenFreeMap / CyclOSM /
+satellite), monthly auto-rebuild + Pages deploy.
 
-## Phase 2 — Route building (BRouter)
+## Phase 2 — Route planner (BRouter) ✅
 
 See [`ROUTING.md`](ROUTING.md).
 
-1. Point-to-point routing with draggable, editable waypoints.
-2. Round trip with a **target distance** (loop generation + convergence).
-3. Runner options as profile switches: **avoid stairs**, **avoid steep
-   slopes** (several strengths).
-4. GPX export.
-5. Bias routes toward `foot_tier=designated`.
+- Custom Running / Trail foot profiles: no stairs by default (toggle), no-run
+  gate incl. not-built ways, mild traffic-light penalty, footway over path
+  over service road, flatter and straighter routes.
+- Round trip with a target distance: circle / oval / teardrop candidates,
+  8-sector direction compass, scoring on stairs, climb, lights, crossings,
+  backtracking, parks, running tracks, POI; reverse direction.
+- Point A → B with numbered vias, auto re-route, optional padding to a target
+  distance with alternatives.
+- Direction chevrons, cancelable generation with progress overlay, GPX export.
 
-## Phase 3 — Activity layer
+## Next
 
-1. Import the user's **own** GPX/FIT files → private blue overlay (client-side
-   parsing, nothing uploaded).
-2. Investigate a personal Strava heatmap via user OAuth + a small backend
-   (note: this moves the project off "static and free"). A global third-party
-   heatmap is not embeddable for free — see [`LIMITATIONS.md`](LIMITATIONS.md).
+1. Tune scoring weights on more real tracks (users drop GPX into `gpx/`).
+2. Slider(s) for the main trade-offs (e.g. *flatter ↔ more interesting*,
+   lights strictness) instead of fixed weights.
+3. Shape run (GPS art): search over a start **area** rather than a fixed
+   point, allow stairs for art routes; then unhide the mode.
+4. Show the route's lights / stairs / crossings as markers on the map.
+5. Remove leftovers: `packages/routing-adapter` stub,
+   `tile-builder/src/prune-deadends.ts`.
 
-## Phase 4 — Reach & richness
+## Later
 
-1. More POI (benches, fountains, changing rooms, lockers).
-2. Surface / lit / width attributes on runnable lines (night/trail running).
-3. Global coverage beyond the Europe extract.
-4. Light/dark auto theme for maximum line contrast.
+1. Import the user's **own** GPX/FIT files → private overlay (client-side).
+2. More POI (benches, fountains, changing rooms, lockers).
+3. Surface / lit attributes for night and trail running.
+4. Coverage beyond the Europe extract.

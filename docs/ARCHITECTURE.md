@@ -1,67 +1,97 @@
 # Architecture
 
-A three-layer system on top of a monorepo, mirroring the sister project
-`my_map-toll`. Each layer has one responsibility and one direction of
-dependency.
+A static site on top of a monorepo, mirroring the sister project
+`my_map-toll`. Two independent halves: a monthly **data pipeline** that builds
+the overlay, and a **browser app** that renders it and plans routes against
+public services.
 
 ```
 ┌───────────────────────────────────────────────────────────────┐
-│  OpenStreetMap (Geofabrik extract)                            │
+│  OpenStreetMap (Geofabrik europe-latest.osm.pbf)              │
 └─────────────┬─────────────────────────────────────────────────┘
-              │  scripts/01-fetch.sh, 02-filter.sh
+              │  scripts/01-fetch.sh, 02-filter.sh (osmium)
               ▼
 ┌───────────────────────────────────────────────────────────────┐
-│  Normalization (packages/tile-builder + packages/interpreter) │
-│   raw OSM tags → { kind, foot_tier | barrier_status | poi_kind } │
+│  Normalization: packages/tile-builder + packages/interpreter  │
+│   raw OSM tags → { kind, blocked | is_track | is_steps |      │
+│                    barrier_status | poi_kind }                │
 └─────────────┬─────────────────────────────────────────────────┘
-              │  tippecanoe, pmtiles  (scripts/04-tile.sh)
+              │  tippecanoe → pmtiles (z12 only, all features)
               ▼
 ┌───────────────────────────────────────────────────────────────┐
-│  Delivery: europe-run.pmtiles on Cloudflare R2 (docs/HOSTING)  │
+│  Delivery: GitHub Release data-YYYY-MM-DD → copied into the   │
+│  GitHub Pages site, served same-origin (docs/HOSTING.md)      │
 └─────────────┬─────────────────────────────────────────────────┘
-              │  static fetch via pmtiles protocol
+              │  pmtiles:// range requests
               ▼
 ┌───────────────────────────────────────────────────────────────┐
-│  Web (packages/web): MapLibre + OpenFreeMap basemap +         │
-│                      our runnable overlay                     │
+│  Web (packages/web): MapLibre + basemap + overlay             │
+│   + route planner ──► BRouter (routes, our foot profiles)     │
+│                   ──► Overpass (local data for scoring,       │
+│                                 raw tags in popups)           │
 └───────────────────────────────────────────────────────────────┘
 ```
+
+## Inverted overlay policy
+
+The basemap already draws walkable paths, so the overlay does **not** draw the
+runnable network (that was the MVP: ~94 M features, several GB). It draws only
+the exceptions a runner needs: ways you **can't** run on, running tracks,
+steps, barriers and runner POI. This keeps the PMTiles file small enough for a
+GitHub Release. *Where* to run is answered by the route planner.
 
 ## Packages
 
 | Package | Depends on | Purpose |
 |---|---|---|
-| `@mmr/model` | — | Types, tiers, reason codes, `TileProperties`. Zero runtime deps. |
-| `@mmr/interpreter` | `model` | Pure functions: `interpretFoot`, `interpretBarrier`, `interpretPoi`. Fully unit-tested. |
-| `@mmr/tile-builder` | `model`, `interpreter` | Node stream (`normalize.ts`) enriching GeoJSON before tippecanoe. |
-| `@mmr/web` | `model` | MapLibre app. Types only from `model`, no build-time code. |
-| `@mmr/routing-adapter` | `model` | Stub for the future BRouter foot-routing integration. |
-
-## Why this split
-
-- **Interpreter is isolated and pure.** Runnable/barrier/POI logic is a pure
-  function of OSM tags, so it is unit-tested and could also run client-side.
-- **Raw tags never reach tiles.** Tiles carry only `osm_id`, `kind`, and the
-  small normalized fields. The popup fetches full tags from Overpass on
-  demand, keeping tiles small.
-- **Basemap is not ours.** OpenFreeMap provides the global background for
-  free; we build and host only the runnable overlay — a static site.
-- **Routing adapter exists but is empty.** It marks the extension point.
-  When routing lands, `tile-builder`/`web` don't change.
+| `@mmr/model` | — | Types: `TileProperties`, `NoRunResult`/`NoRunReason`, `BarrierResult`, `PoiKind`. |
+| `@mmr/interpreter` | `model` | Pure functions: `interpretNoRun`, `interpretTrack`, `interpretBarrier`, `interpretPoi`. Unit-tested (`npm test`). |
+| `@mmr/tile-builder` | `model`, `interpreter` | `normalize.ts`: streams osmium GeoJSONSeq → normalized features for tippecanoe. (`prune-deadends.ts` is an unused leftover.) |
+| `@mmr/web` | `model` | MapLibre app + route planner. |
+| `@mmr/routing-adapter` | `model` | Unused stub from the MVP; routing lives in `web`. |
 
 ## Tile schema
 
-A single vector layer `run`; features are discriminated by `kind`:
+A single vector layer `run`, tiles at **z12 only** (the browser overzooms),
+`--full-detail=16`, no feature dropping. Features are discriminated by `kind`:
 
 | `kind` | fields | geometry |
 |---|---|---|
-| `line` | `foot_tier` (`designated`\|`allowed`), `is_steps?` | LineString |
+| `line` | `blocked?` (can't run), `is_track?`, `is_steps?`, `is_area?` | LineString / Polygon |
 | `barrier` | `barrier_status` (`blocked`\|`passable`), `barrier_kind?` | Point |
 | `poi` | `poi_kind` (`water`\|`shelter`\|`viewpoint`\|`toilets`), `name?` | Point |
 
-## What's intentionally NOT here (MVP)
+Every feature also carries `osm_type` + `osm_id`; raw tags never reach the
+tiles — the popup fetches them lazily from Overpass.
 
-- No server, API, or database.
-- No manually-curated data layer — OSM is the sole source of truth.
-- No routing yet — only the architectural seam (`@mmr/routing-adapter`).
-- No third-party activity heatmap (see `LIMITATIONS.md`).
+> Do **not** set per-feature `tippecanoe.minzoom` in `normalize.ts`: in
+> tippecanoe 2.49 it made ~99.9 % of features disappear.
+
+## Web modules (`packages/web/src`)
+
+| Module | Role |
+|---|---|
+| `main.ts` | Map, basemap switcher, overlay sources/layers, icons, popups, context menu, URL hash, panel. |
+| `layers.ts` | Overlay + route layer styles (incl. `route-arrows` direction chevrons). |
+| `icons.ts` | Canvas-drawn POI, barrier ✕ and route-arrow icons. |
+| `route-planner.ts` | Planner UI and orchestration: waypoints with roles, modes, cancelable jobs, loop / padded generation, scoring, GPX. |
+| `routing.ts` | BRouter client: profile upload + cache, stairs toggle, fallback, abort/timeout, geocoding, GPX. |
+| `loop-gen.ts` | Loop outlines (circle / oval / teardrop) and waypoint placement. |
+| `loop-data.ts` | One Overpass fetch → local indexes (network, stairs, crossings, lights, parks, tracks, POI, not-built) and scoring helpers. |
+| `pednet.ts` | Grid-hash point index (`nearest`, `nearestDist`); also the shape-run pre-filter. |
+| `shape-art.ts` | Shape-run (GPS art) auto-fit — mode hidden. |
+| `profiles.generated.ts` | BRouter profile text, generated by `profiles/build-profiles.mjs`. |
+
+Routing details: [`ROUTING.md`](ROUTING.md).
+
+## Design choices
+
+- **Interpreter is isolated and pure** — OSM rules are unit-tested and the
+  same code builds both the tiles and the local city preview
+  (`scripts/local-geojson.ts`).
+- **Everything static and keyless** where possible: GitHub Pages, public
+  BRouter/Overpass, OpenFreeMap. The only key is the public Thunderforest
+  basemap key.
+- **Routing constraints the engine can't express** (per-crossing light counts,
+  parks, running tracks, POI, not-built bridges) are applied by generating
+  several candidates and scoring them client-side.
